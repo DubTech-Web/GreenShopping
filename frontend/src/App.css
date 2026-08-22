@@ -1,0 +1,147 @@
+/* GreenShopping component styles (Spec §24). Reusable classes, no CSS framework. */
+
+/* ---- Layout ---- */
+.container { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+.page { padding: 28px 0 64px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; gap: 12px; align-items: center; }
+.row-wrap { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.grow { flex: 1; }
+.muted { color: var(--text-muted); }
+.center-text { text-align: center; }
+.mono { font-variant-numeric: tabular-nums; }
+
+/* ---- Header / nav ---- */
+.appbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--moss); color: #fff;
+  box-shadow: var(--shadow-md);
+}
+.appbar .container { display: flex; align-items: center; gap: 20px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.2rem;
+  color: #fff; letter-spacing: -0.02em; }
+.brand:hover { text-decoration: none; }
+.brand-leaf { width: 26px; height: 26px; }
+.navlinks { display: flex; gap: 4px; align-items: center; margin-left: auto; }
+.navlink { color: #f0ead9; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.95rem;
+  transition: background var(--transition); }
+.navlink:hover { background: rgba(255, 255, 255, 0.14); text-decoration: none; }
+.navlink.active { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.cart-pill { background: var(--accent); color: var(--accent-contrast); border-radius: 999px;
+  padding: 1px 8px; font-size: 0.8rem; font-weight: 700; margin-left: 6px; }
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-weight: 600; font-size: 0.95rem; cursor: pointer;
+  padding: 10px 18px; border-radius: var(--radius-sm); border: 1px solid transparent;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: var(--primary-contrast); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-accent { background: var(--accent); color: var(--accent-contrast); }
+.btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-ghost { background: transparent; color: var(--text); border-color: var(--surface-border); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-subtle); }
+.btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+.btn-block { width: 100%; }
+
+/* ---- Cards / surfaces ---- */
+.card {
+  background: var(--bg-elevated); border: 1px solid var(--surface-border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 20px; }
+.panel { background: var(--bg-subtle); border: 1px solid var(--surface-border);
+  border-radius: var(--radius); padding: 18px; }
+
+/* ---- Badges ---- */
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 600;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.badge-eco { background: var(--eco-bg); color: var(--eco); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-neutral { background: var(--bg-subtle); color: var(--text-muted); }
+
+/* Eco score meter */
+.eco-meter { display: inline-flex; align-items: center; gap: 8px; }
+.eco-bar { width: 62px; height: 6px; border-radius: 999px; background: var(--surface-border);
+  overflow: hidden; }
+.eco-bar > span { display: block; height: 100%; background: var(--eco); border-radius: 999px; }
+
+/* ---- Forms ---- */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.input, .select {
+  font: inherit; padding: 10px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border); background: var(--bg-elevated); color: var(--text);
+  transition: border-color var(--transition);
+}
+.input:focus, .select:focus { border-color: var(--primary); outline: none; box-shadow: var(--ring); }
+
+/* ---- Product grid ---- */
+.grid-products { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.product-card { display: flex; flex-direction: column; overflow: hidden; transition: box-shadow var(--transition), transform var(--transition); }
+.product-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.product-thumb {
+  aspect-ratio: 4 / 3; display: grid; place-items: center; font-size: 2.6rem;
+  background: linear-gradient(135deg, var(--bg-subtle), #eee3cd);
+  color: var(--moss); border-bottom: 1px solid var(--surface-border);
+}
+@media (prefers-color-scheme: dark) {
+  .product-thumb { background: linear-gradient(135deg, #2f2b1f, #3a3426); color: var(--leaf); }
+}
+.product-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.product-name { font-weight: 600; font-size: 0.98rem; }
+.product-cat { font-size: 0.8rem; color: var(--text-muted); }
+.price { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+
+/* ---- Tables (admin) ---- */
+.table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--surface-border); }
+.table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.table tbody tr:hover { background: var(--bg-subtle); }
+.table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--surface-border); background: var(--bg-elevated); }
+
+/* ---- Metric tiles ---- */
+.metric-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.metric { padding: 18px 20px; }
+.metric-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; }
+.metric-value { font-size: 1.9rem; font-weight: 700; margin-top: 4px; letter-spacing: -0.02em; }
+.metric-accent { color: var(--accent); }
+.metric-eco { color: var(--eco); }
+
+/* ---- Carbon impact panel ---- */
+.impact-row { display: flex; justify-content: space-between; padding: 6px 0; }
+.impact-total { border-top: 2px solid var(--surface-border); margin-top: 6px; padding-top: 10px;
+  font-weight: 700; font-size: 1.1rem; }
+
+/* ---- Auth pages ---- */
+.auth-wrap { min-height: calc(100vh - 62px); display: grid; place-items: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 400px; }
+
+/* ---- Feedback ---- */
+.alert { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 0.9rem; }
+.alert-error { background: var(--danger-bg); color: var(--danger); }
+.alert-info { background: var(--info-bg); color: var(--text); }
+.spinner { width: 34px; height: 34px; border: 3px solid var(--surface-border);
+  border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.loading { display: grid; place-items: center; padding: 60px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Reco / alternative highlight ---- */
+.eco-alt { border: 1.5px solid var(--eco); background: var(--eco-bg); }
+.reason { font-size: 0.85rem; color: var(--text-muted); font-style: italic; }
+
+/* ---- Footer ---- */
+.footer { border-top: 1px solid var(--surface-border); padding: 24px 0; color: var(--text-muted);
+  font-size: 0.85rem; text-align: center; }
+
+/* ---- Hero (products landing) ---- */
+.hero-band { background: linear-gradient(135deg, var(--moss), var(--moss-700));
+  color: #fff; border-radius: var(--radius-lg); padding: 32px; margin-bottom: 24px; }
+.hero-band h1 { color: #fff; margin-bottom: 8px; }
+.hero-band p { color: #eef0e2; max-width: 60ch; }

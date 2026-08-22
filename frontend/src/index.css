@@ -1,0 +1,105 @@
+/* GreenShopping — "Earth & Sky" design system (Spec §24).
+ * Hand-written tokens, no UI framework, tiny footprint (Spec §18, §29).
+ * Palette: moss #4B5D2A · terracotta #C2703D · sand #FBF7F0 · ink #2A2416.
+ * WCAG AA contrast in both themes. */
+
+:root {
+  /* Brand */
+  --moss: #4b5d2a;
+  --moss-600: #3e4d23;
+  --moss-700: #33401d;
+  --leaf: #6b8e3d;
+  --terracotta: #c2703d;
+  --terracotta-600: #a95d2f;
+  --sand: #fbf7f0;
+  --ink: #2a2416;
+
+  /* Semantic (light theme) */
+  --bg: var(--sand);
+  --bg-elevated: #ffffff;
+  --bg-subtle: #f3ede1;
+  --surface-border: #e4dccb;
+  --text: var(--ink);
+  --text-muted: #6b6350;
+  --primary: var(--moss);
+  --primary-hover: var(--moss-600);
+  --primary-contrast: #ffffff;
+  --accent: var(--terracotta);
+  --accent-hover: var(--terracotta-600);
+  --accent-contrast: #ffffff;
+
+  /* Status */
+  --eco: #2f7d4f;
+  --eco-bg: #e4f2e8;
+  --warn: #b7791f;
+  --warn-bg: #fbeecb;
+  --danger: #b3402f;
+  --danger-bg: #f8e3df;
+  --info-bg: #e8eef4;
+
+  /* Shape & motion */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 20px;
+  --shadow-sm: 0 1px 2px rgba(42, 36, 22, 0.06), 0 1px 3px rgba(42, 36, 22, 0.08);
+  --shadow-md: 0 4px 12px rgba(42, 36, 22, 0.1);
+  --shadow-lg: 0 12px 32px rgba(42, 36, 22, 0.14);
+  --ring: 0 0 0 3px rgba(75, 93, 42, 0.28);
+  --space: 8px;
+  --maxw: 1120px;
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --transition: 160ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1a13;
+    --bg-elevated: #262319;
+    --bg-subtle: #2f2b1f;
+    --surface-border: #3c3626;
+    --text: #f2ecdd;
+    --text-muted: #b3a988;
+    --primary: #8bab54;
+    --primary-hover: #9cbb66;
+    --primary-contrast: #1c1a13;
+    --accent: #d98a56;
+    --accent-hover: #e39c6b;
+    --accent-contrast: #1c1a13;
+    --eco: #6fc38c;
+    --eco-bg: #23372a;
+    --warn: #e0b667;
+    --warn-bg: #3a3120;
+    --danger: #e5876f;
+    --danger-bg: #3a251f;
+    --info-bg: #23303a;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45);
+    --ring: 0 0 0 3px rgba(139, 171, 84, 0.32);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { color-scheme: light dark; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3 { line-height: 1.2; margin: 0 0 0.5em; letter-spacing: -0.01em; }
+
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
