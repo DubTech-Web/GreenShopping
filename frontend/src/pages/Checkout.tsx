@@ -133,7 +133,7 @@ export default function Checkout() {
               disabled={!method || placing} onClick={() => setConfirming(true)}>
               {placing ? "Starting payment…" : "Continue to payment"}
             </button>
-            <div className="reason center-text" style={{ marginTop: 6 }}>Paystack demo charge: ₦100. Product prices remain unchanged.</div>
+            <div className="reason center-text" style={{ marginTop: 6 }}>You will be redirected to secure Paystack checkout.</div>
           </div>
         </aside>
       </div>

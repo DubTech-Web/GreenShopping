@@ -56,9 +56,11 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         """Final CORS allow-list: configured dev origins + the deployed frontend if set."""
-        origins = list(self.cors_origins)
-        if self.frontend_url and self.frontend_url not in origins:
-            origins.append(self.frontend_url.rstrip("/"))
+        origins = [origin.strip().rstrip("/") for origin in self.cors_origins
+                   if origin.strip().startswith(("http://", "https://"))]
+        frontend = self.frontend_url.strip()
+        if frontend.startswith(("http://", "https://")) and frontend.rstrip("/") not in origins:
+            origins.append(frontend.rstrip("/"))
         return origins
 
     @property
