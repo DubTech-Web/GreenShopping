@@ -47,7 +47,7 @@ export default function ProductDetail() {
 
       <div className="card card-pad" style={{ display: "grid", gap: 24, gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)" }}>
         <div className="product-thumb" style={{ borderRadius: "var(--radius)", minHeight: 240 }}>
-          <ProductImage category={p.category} ecoFriendly={p.is_eco_friendly} />
+          <ProductImage imageUrl={p.image_url} name={p.name} critical />
         </div>
         <div className="stack">
           <div className="product-cat">{p.category}</div>
@@ -112,7 +112,7 @@ function EcoAlternative({ alt }: { alt: Recommendation }) {
 function RecoCard({ r }: { r: Recommendation }) {
   return (
     <Link to={`/products/${r.id}`} className="card product-card" style={{ color: "inherit" }}>
-      <div className="product-thumb"><ProductImage category={r.category} ecoFriendly={r.is_eco_friendly} /></div>
+      <div className="product-thumb"><ProductImage imageUrl={r.image_url} name={r.name} /></div>
       <div className="product-body">
         <div className="product-name">{r.name}</div>
         <EcoScore score={r.eco_score} />

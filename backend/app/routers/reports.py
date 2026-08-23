@@ -17,12 +17,18 @@ from ..schemas import (
     SalesReport,
     SustainabilityReport,
 )
+from ..services import order_state
 from ..services.delivery import DELIVERY_OPTIONS, get_option
 
 router = APIRouter(prefix="/api/reports", tags=["reports"], dependencies=[Depends(require_admin)])
 
 _EXPRESS_FACTOR = get_option("express").emission_factor
 BEST_SELLERS_LIMIT = 5
+
+# Reports count only orders whose payment succeeded (stock-committed). Provisional
+# "Pending Payment" orders and "Cancelled" orders are excluded so figures reflect real,
+# realized sales and their carbon (Spec Phase-2 §15; reporting §15).
+COUNTED_STATES = tuple(order_state.STOCK_COMMITTED_STATES)
 
 
 @router.get("/dashboard", response_model=DashboardMetrics)
@@ -38,7 +44,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardMetrics:
             func.count(Order.id),
             func.coalesce(func.sum(Order.carbon_impact), 0.0),
             func.coalesce(func.sum(case((Order.delivery_method == "eco", 1), else_=0)), 0),
-        )
+        ).where(Order.status.in_(COUNTED_STATES))
     ).one()
     total_sales, total_orders, total_co2, eco_orders = o
 
@@ -65,8 +71,12 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardMetrics:
 
 @router.get("/sales", response_model=SalesReport)
 def sales(db: Session = Depends(get_db)) -> SalesReport:
-    total_sales = db.scalar(select(func.coalesce(func.sum(Order.total_amount), 0.0)))
-    total_orders = db.scalar(select(func.count()).select_from(Order)) or 0
+    total_sales = db.scalar(
+        select(func.coalesce(func.sum(Order.total_amount), 0.0)).where(Order.status.in_(COUNTED_STATES))
+    )
+    total_orders = db.scalar(
+        select(func.count()).select_from(Order).where(Order.status.in_(COUNTED_STATES))
+    ) or 0
 
     # Best sellers: aggregate order_items, join product name. GROUP BY + ORDER BY + LIMIT.
     best_rows = db.execute(
@@ -77,6 +87,8 @@ def sales(db: Session = Depends(get_db)) -> SalesReport:
             func.sum(OrderItem.quantity * OrderItem.unit_price).label("revenue"),
         )
         .join(Product, Product.id == OrderItem.product_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.status.in_(COUNTED_STATES))
         .group_by(OrderItem.product_id, Product.name)
         .order_by(func.sum(OrderItem.quantity).desc())
         .limit(BEST_SELLERS_LIMIT)
@@ -88,6 +100,8 @@ def sales(db: Session = Depends(get_db)) -> SalesReport:
             func.sum(OrderItem.quantity * OrderItem.unit_price).label("revenue"),
         )
         .join(Product, Product.id == OrderItem.product_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Order.status.in_(COUNTED_STATES))
         .group_by(Product.category)
         .order_by(func.sum(OrderItem.quantity * OrderItem.unit_price).desc())
     ).all()
@@ -108,12 +122,19 @@ def sales(db: Session = Depends(get_db)) -> SalesReport:
 
 @router.get("/sustainability", response_model=SustainabilityReport)
 def sustainability(db: Session = Depends(get_db)) -> SustainabilityReport:
-    total_orders = db.scalar(select(func.count()).select_from(Order)) or 0
-    total_co2 = float(db.scalar(select(func.coalesce(func.sum(Order.carbon_impact), 0.0))))
-    avg_co2 = float(db.scalar(select(func.coalesce(func.avg(Order.carbon_impact), 0.0))))
+    total_orders = db.scalar(
+        select(func.count()).select_from(Order).where(Order.status.in_(COUNTED_STATES))
+    ) or 0
+    total_co2 = float(db.scalar(
+        select(func.coalesce(func.sum(Order.carbon_impact), 0.0)).where(Order.status.in_(COUNTED_STATES))
+    ))
+    avg_co2 = float(db.scalar(
+        select(func.coalesce(func.avg(Order.carbon_impact), 0.0)).where(Order.status.in_(COUNTED_STATES))
+    ))
 
     eco_orders = db.scalar(
-        select(func.count()).select_from(Order).where(Order.delivery_method == "eco")
+        select(func.count()).select_from(Order)
+        .where(Order.delivery_method == "eco", Order.status.in_(COUNTED_STATES))
     ) or 0
     eco_pct = round(100.0 * eco_orders / total_orders, 1) if total_orders else 0.0
 
@@ -122,7 +143,8 @@ def sustainability(db: Session = Depends(get_db)) -> SustainabilityReport:
         select(func.coalesce(func.sum(OrderItem.quantity), 0))
         .select_from(OrderItem)
         .join(Product, Product.id == OrderItem.product_id)
-        .where(Product.is_eco_friendly.is_(True))
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(Product.is_eco_friendly.is_(True), Order.status.in_(COUNTED_STATES))
     ) or 0
 
     # Reduction vs all-Express baseline: for each method, express counterfactual delivery
@@ -131,6 +153,7 @@ def sustainability(db: Session = Depends(get_db)) -> SustainabilityReport:
     method_co2 = dict(
         db.execute(
             select(Order.delivery_method, func.coalesce(func.sum(Order.delivery_carbon), 0.0))
+            .where(Order.status.in_(COUNTED_STATES))
             .group_by(Order.delivery_method)
         ).all()
     )

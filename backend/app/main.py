@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .database import Base, engine
-from .routers import admin, auth, cart, carbon, orders, products, reports
+from .database import Base, engine, upgrade_legacy_sqlite_schema
+from .routers import admin, auth, cart, carbon, orders, payments, products, reports
 
 settings = get_settings()
 
@@ -19,6 +19,7 @@ settings = get_settings()
 async def lifespan(_app: FastAPI):
     # Create tables if absent. Seeding is a separate explicit step (python -m app.seed).
     Base.metadata.create_all(bind=engine)
+    upgrade_legacy_sqlite_schema()
     yield
 
 
@@ -29,10 +30,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Explicit CORS origins (not '*') so the dev frontend works without weakening security (§25).
+# Explicit CORS origins (not '*') so the dev frontend and the deployed Vercel frontend work
+# without weakening security. Production adds FRONTEND_URL via settings.allowed_origins (§25, §37).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,6 +44,7 @@ app.include_router(auth.router)
 app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
+app.include_router(payments.router)
 app.include_router(carbon.router)
 app.include_router(admin.router)
 app.include_router(reports.router)

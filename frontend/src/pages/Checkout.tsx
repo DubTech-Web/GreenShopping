@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import type { Cart, Estimate } from "../types";
-import { ErrorNote, money, Spinner } from "../components";
+import { ConfirmModal, ErrorNote, money, Spinner } from "../components";
 import { useApp } from "../store";
 
 export default function Checkout() {
@@ -15,6 +15,7 @@ export default function Checkout() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Fetch the carbon estimate for a distance. Called on load and on explicit "update" —
   // NOT on every keystroke, and never when only the delivery method changes (Spec §21).
@@ -42,9 +43,16 @@ export default function Checkout() {
   }, [fetchEstimate]);
 
   const placeOrder = async () => {
+    setConfirming(false);
     setPlacing(true); setError("");
     try {
       const order = await api.checkout(method, distance);
+      const payment = await api.initPayment(order.id);
+      if (!payment.simulated && payment.authorization_url) {
+        window.location.assign(payment.authorization_url);
+        return;
+      }
+      await api.verifyPayment(payment.reference);
       await refreshCart();
       navigate(`/orders/${order.id}`, { state: { justPlaced: true } });
     } catch (e) {
@@ -64,7 +72,7 @@ export default function Checkout() {
       <h1>Checkout</h1>
       {error && <ErrorNote message={error} />}
 
-      <div style={{ display: "grid", gap: 20, gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr)" }}>
+      <div className="checkout-layout">
         {/* Delivery selection */}
         <div className="stack">
           <div className="card card-pad stack">
@@ -122,13 +130,14 @@ export default function Checkout() {
             <div className="impact-row impact-total"><span>Order total</span>
               <span className="mono">{selected ? money(cart.subtotal + selected.cost) : money(cart.subtotal)}</span></div>
             <button className="btn btn-primary btn-block" style={{ marginTop: 12 }}
-              disabled={!method || placing} onClick={placeOrder}>
-              {placing ? "Placing order…" : "Place order (simulated)"}
+              disabled={!method || placing} onClick={() => setConfirming(true)}>
+              {placing ? "Starting payment…" : "Continue to payment"}
             </button>
-            <div className="reason center-text" style={{ marginTop: 6 }}>No real payment is taken.</div>
+            <div className="reason center-text" style={{ marginTop: 6 }}>Paystack demo charge: ₦100. Product prices remain unchanged.</div>
           </div>
         </aside>
       </div>
+      {confirming && <ConfirmModal title="Confirm checkout" message="You are about to proceed to payment." confirmLabel="Continue" onConfirm={placeOrder} onCancel={() => setConfirming(false)} />}
     </div>
   );
 }

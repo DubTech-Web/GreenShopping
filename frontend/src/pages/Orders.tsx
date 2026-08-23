@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { OrderSummary } from "../types";
-import { ErrorNote, money, Spinner } from "../components";
+import { ConfirmModal, ErrorNote, money, Spinner } from "../components";
 
 export default function Orders() {
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState("");
+  const [cancelId, setCancelId] = useState<number | null>(null);
+
+  const cancel = async (id: number) => {
+    setCancelId(null);
+    try {
+      const updated = await api.cancelOrder(id);
+      setOrders((current) => current?.map((order) => order.id === id ? { ...order, status: updated.status } : order) ?? null);
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Could not cancel order"); }
+  };
 
   useEffect(() => {
     api.orders().then(setOrders).catch((e) => setError(e.message));
@@ -23,7 +32,7 @@ export default function Orders() {
       ) : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Order</th><th>Date</th><th>Delivery</th><th>Carbon</th><th>Total</th><th>Status</th></tr></thead>
+            <thead><tr><th>Order</th><th>Date</th><th>Delivery</th><th>Carbon</th><th>Total</th><th>Status</th><th /></tr></thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
@@ -33,12 +42,15 @@ export default function Orders() {
                   <td className="mono">{o.carbon_impact.toFixed(2)} kg</td>
                   <td className="mono">{money(o.total_amount)}</td>
                   <td><span className="badge badge-neutral">{o.status}</span></td>
+                  <td>{["Pending Payment", "Paid", "Processing"].includes(o.status) &&
+                    <button className="btn btn-ghost btn-sm" onClick={() => setCancelId(o.id)}>Cancel</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {cancelId !== null && <ConfirmModal title="Cancel order?" message="This may restore product inventory." confirmLabel="Cancel order" onConfirm={() => cancel(cancelId)} onCancel={() => setCancelId(null)} />}
     </div>
   );
 }

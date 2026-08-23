@@ -3,6 +3,7 @@
 import type {
   AdminOrderRow, AdminProductRow, Cart, Customer, Dashboard, Estimate, Order, OrderSummary,
   ProductDetail, ProductPage, RestockRow, SalesReport, SustainabilityReport, TokenResponse,
+  MessageResponse, PaymentInit,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -47,10 +48,20 @@ const body = (v: unknown) => JSON.stringify(v);
 export const api = {
   // Auth
   register: (name: string, email: string, password: string) =>
-    request<TokenResponse>("/api/auth/register", { method: "POST", body: body({ name, email, password }) }),
+    request<MessageResponse>("/api/auth/register", { method: "POST", body: body({ name, email, password }) }),
+  verifyEmail: (email: string, code: string) =>
+    request<TokenResponse>("/api/auth/verify-email", { method: "POST", body: body({ email, code }) }),
+  resendCode: (email: string) =>
+    request<MessageResponse>("/api/auth/resend-code", { method: "POST", body: body({ email }) }),
+  forgotPassword: (email: string) =>
+    request<MessageResponse>("/api/auth/forgot-password", { method: "POST", body: body({ email }) }),
+  resetPassword: (email: string, code: string, new_password: string) =>
+    request<MessageResponse>("/api/auth/reset-password", { method: "POST", body: body({ email, code, new_password }) }),
   login: (email: string, password: string) =>
     request<TokenResponse>("/api/auth/login", { method: "POST", body: body({ email, password }) }),
   me: () => request<Customer>("/api/auth/me"),
+  updateProfile: (name: string) =>
+    request<Customer>("/api/auth/me", { method: "PATCH", body: body({ name }) }),
 
   // Products
   products: (params: { page?: number; limit?: number; category?: string; eco_only?: boolean; q?: string } = {}) => {
@@ -76,8 +87,13 @@ export const api = {
   // Orders
   checkout: (delivery_method: string, delivery_distance: number) =>
     request<Order>("/api/orders", { method: "POST", body: body({ delivery_method, delivery_distance }) }),
+  initPayment: (order_id: number) =>
+    request<PaymentInit>("/api/payments/init", { method: "POST", body: body({ order_id }) }),
+  verifyPayment: (reference: string) =>
+    request<Order>("/api/payments/verify", { method: "POST", body: body({ reference }) }),
   orders: () => request<OrderSummary[]>("/api/orders"),
   order: (id: number) => request<Order>(`/api/orders/${id}`),
+  cancelOrder: (id: number) => request<Order>(`/api/orders/${id}/cancel`, { method: "POST" }),
 
   // Admin
   adminProducts: (page = 1, limit = 50) =>

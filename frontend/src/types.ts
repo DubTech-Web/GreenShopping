@@ -1,10 +1,11 @@
 // Shared API types — mirror the backend Pydantic DTOs (Spec §30 typed frontend).
 
 export interface TokenResponse { access_token: string; token_type: string; }
-export interface Customer { id: number; name: string; email: string; is_admin: boolean; }
+export interface MessageResponse { message: string; dev_code?: string | null; cooldown_seconds?: number | null; }
+export interface Customer { id: number; name: string; email: string; is_admin: boolean; is_verified: boolean; created_at: string; }
 
 export interface ProductSummary {
-  id: number; name: string; category: string; price: number;
+  id: number; name: string; image_url: string; category: string; price: number;
   stock_quantity: number; eco_score: number; is_eco_friendly: boolean;
 }
 export interface Recommendation extends ProductSummary {
@@ -70,4 +71,9 @@ export interface SustainabilityReport {
   total_estimated_co2: number; average_co2_per_order: number; eco_delivery_count: number;
   eco_delivery_percentage: number; eco_products_sold_units: number;
   estimated_co2_saved_vs_express: number; unit: string; is_estimate: boolean;
+}
+
+export interface PaymentInit {
+  reference: string; amount_kobo: number; public_key: string; email: string;
+  simulated: boolean; authorization_url?: string | null; access_code?: string | null;
 }

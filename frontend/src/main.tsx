@@ -17,7 +17,9 @@ import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import Orders from "./pages/Orders";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import Landing from "./pages/Landing";
 
 // Admin pages + charts — lazy so Recharts ships only to admins (Spec §18 code-splitting).
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -32,7 +34,7 @@ const router = createBrowserRouter([
     path: "/",
     element: <App />,
     children: [
-      { index: true, element: <Products /> },
+      { index: true, element: <Landing /> },
       { path: "products", element: <Products /> },
       { path: "products/:id", element: <ProductDetail /> },
       { path: "login", element: <Login /> },
@@ -40,6 +42,7 @@ const router = createBrowserRouter([
       { path: "cart", element: <Cart /> },
       { path: "checkout", element: <RequireAuth><Checkout /></RequireAuth> },
       { path: "orders", element: <RequireAuth><Orders /></RequireAuth> },
+      { path: "profile", element: <RequireAuth><Profile /></RequireAuth> },
       { path: "orders/:id", element: <RequireAuth><OrderConfirmation /></RequireAuth> },
       { path: "admin", element: <RequireAdmin>{lazyPage(<AdminDashboard />)}</RequireAdmin> },
       { path: "admin/products", element: <RequireAdmin>{lazyPage(<AdminProducts />)}</RequireAdmin> },

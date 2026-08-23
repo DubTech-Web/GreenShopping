@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
 import type { Order } from "../types";
 import { ErrorNote, money, Spinner } from "../components";
 
 export default function OrderConfirmation() {
   const { id } = useParams();
+  const location = useLocation();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.order(Number(id)).then(setOrder).catch((e) => setError(e.message)).finally(() => setLoading(false));
-  }, [id]);
+    const reference = new URLSearchParams(location.search).get("reference");
+    const load = reference ? api.verifyPayment(reference) : api.order(Number(id));
+    load.then(setOrder).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, [id, location.search]);
 
   if (loading) return <Spinner />;
   if (error) return <ErrorNote message={error} />;

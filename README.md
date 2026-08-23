@@ -110,6 +110,49 @@ npm install
 npm run dev                  # http://127.0.0.1:5173
 ```
 
+The second-phase checkout uses a backend-authoritative Paystack demonstration charge of
+₦100 (`PAYMENT_AMOUNT_KOBO=10000`), independent of the displayed product and cart prices.
+With no Paystack or Resend keys configured, local development uses offline payment and
+verification-code simulation; production requires both services and never returns codes to
+the client.
+
+Product cards use optimized Unsplash photographs (`640px`, quality `75`) with lazy loading;
+the primary product-detail image loads eagerly. This keeps the repository small while using
+real product imagery instead of inline illustrations.
+
+### Production configuration
+
+Deploy the frontend to Vercel with `VITE_API_URL` set to the Render API URL. Deploy the
+backend with the environment variables in [`backend/.env.example`](backend/.env.example),
+including a managed PostgreSQL `DATABASE_URL`, a strong `JWT_SECRET`, `FRONTEND_URL`, Resend
+credentials, and Paystack credentials. [`render.yaml`](render.yaml) contains the minimal
+Render web-service definition. The backend creates the schema on startup; run
+`python -m app.seed` once against a fresh managed database when sample data is needed.
+
+Resend setup: create an API key, verify the sending domain (or use the approved development
+sender), then set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` on Render. Paystack setup: create
+test/live keys, set the secret and public keys on the backend, and keep the fixed
+`PAYMENT_AMOUNT_KOBO=10000` value unchanged for this assignment.
+
+### Migrating SQLite to PostgreSQL
+
+Provision a managed PostgreSQL database with Neon, Supabase, or Render PostgreSQL and copy
+its connection string into `backend/.env` as `DATABASE_URL`. From the `backend` directory,
+run:
+
+```bash
+# Windows PowerShell
+$env:DATABASE_URL="postgresql://user:password@host/database"
+python -m app.migrate_database
+```
+
+The migration creates the current SQLAlchemy schema, copies rows from the local
+`greenshopping.db` (or `SOURCE_DATABASE_URL`), preserves existing IDs, and resets PostgreSQL
+sequences. It copies only columns shared by both schemas, so new second-phase columns receive
+their model defaults. Review the target database before running it and take a backup first;
+the script does not delete target data and will fail on duplicate rows. To initialize a fresh
+managed database instead, set `DATABASE_URL` and run `python -m app.seed`.
+
 > Verified toolchain: Python 3.14, Node 24. All backend deps install as prebuilt wheels
 > (no C/Rust compiler required).
 

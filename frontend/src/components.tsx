@@ -40,13 +40,28 @@ export function ErrorNote({ message }: { message: string }) {
   return <div className="alert alert-error" role="alert">{message}</div>;
 }
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+export function ConfirmModal({ title, message, confirmLabel, onConfirm, onCancel }: {
+  title: string; message: string; confirmLabel: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}>
+      <h2 id="confirm-title">{title}</h2>
+      <p className="muted">{message}</p>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
+        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-primary" onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    </div>
+  </div>;
+}
+
+const money = (n: number) => `₦${n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export { money };
 
 export function ProductCard({ p }: { p: ProductSummary }) {
   return (
     <Link to={`/products/${p.id}`} className="card product-card" style={{ color: "inherit" }}>
-      <div className="product-thumb"><ProductImage category={p.category} ecoFriendly={p.is_eco_friendly} /></div>
+      <div className="product-thumb"><ProductImage imageUrl={p.image_url} name={p.name} /></div>
       <div className="product-body">
         <div className="product-cat">{p.category}</div>
         <div className="product-name">{p.name}</div>

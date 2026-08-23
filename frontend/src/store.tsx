@@ -8,7 +8,7 @@ interface AppState {
   loading: boolean;
   cartCount: number;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<string | null>;
   logout: () => void;
   refreshCart: () => Promise<void>;
 }
@@ -55,9 +55,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [afterAuth]);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    const { access_token } = await api.register(name, email, password);
-    await afterAuth(access_token);
-  }, [afterAuth]);
+    const response = await api.register(name, email, password);
+    return response.dev_code ?? null;
+  }, []);
 
   const logout = useCallback(() => {
     tokenStore.clear();       // stateless JWT: client-side discard is the whole logout (Spec §6)

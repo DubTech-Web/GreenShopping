@@ -93,8 +93,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+#root { min-height: 100vh; display: flex; flex-direction: column; }
+#root > main { flex: 1; width: 100%; }
+
 a { color: var(--primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a:hover { text-decoration: none; }
 
 h1, h2, h3 { line-height: 1.2; margin: 0 0 0.5em; letter-spacing: -0.01em; }
 

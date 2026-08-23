@@ -1,11 +1,16 @@
-"""Order processing endpoints (Spec §9, R4).
+"""Order processing endpoints (Spec §9, R4; Phase-2 §11, §13–§15).
 
-Checkout runs as ONE transaction: validate stock -> compute carbon -> create order + items
--> decrement inventory -> commit. Any failure rolls the whole thing back so stock can never
-drift (Spec §9, §26). Payment is simulated (Spec §9). Carbon is computed server-side and
-stored on the order for reporting (Spec §12).
+Checkout no longer touches inventory. It snapshots the cart into an order in **Pending
+Payment** and returns it; stock is only committed once payment is verified (see routers/
+payments.py). This fixes the inventory lifecycle (Spec Phase-2 §13): adding to cart — and now
+even reaching checkout — never reduces stock.
 
-Order listing eager-loads items to avoid N+1 queries (Spec §16).
+    checkout            -> Order(Pending Payment), cart kept, stock unchanged
+    payment verified    -> Order(Paid), stock deducted once, cart cleared
+    cancel (here/admin) -> stock restored once if it had been deducted
+
+Carbon is computed server-side and stored on the order for reporting (Spec §12). Order reads
+eager-load items to avoid N+1 queries (Spec §16).
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -13,20 +18,26 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..deps import get_current_customer
-from ..models import Customer, Order, OrderItem, RecommendationInteraction
-from ..schemas import (
-    CheckoutRequest,
-    OrderItemResponse,
-    OrderResponse,
-    OrderSummary,
-)
-from ..services import carbon
+from ..models import Customer, Order, OrderItem
+from ..schemas import CheckoutRequest, OrderItemResponse, OrderResponse, OrderSummary
+from ..services import carbon, inventory, order_state
 from ..services.cart_query import load_cart_items
 from ..services.delivery import get_option
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
-VALID_STATUSES = ("Pending", "Processing", "Shipped", "Delivered", "Cancelled")
+
+def _to_response(order: Order, items: list[OrderItemResponse]) -> OrderResponse:
+    return OrderResponse(
+        id=order.id,
+        status=order.status,
+        total_amount=float(order.total_amount),
+        delivery_method=order.delivery_method,
+        delivery_distance=order.delivery_distance,
+        carbon_impact=order.carbon_impact,
+        created_at=order.created_at,
+        items=items,
+    )
 
 
 @router.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
@@ -37,18 +48,18 @@ def checkout(
 ) -> OrderResponse:
     option = get_option(payload.delivery_method)
     if option is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown delivery method")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Unknown delivery method")
 
     items = load_cart_items(db, customer.id)
     if not items:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart is empty")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Cart is empty")
 
-    # Re-validate stock at checkout time (cart may be stale) before any write.
+    # Re-validate stock at checkout so we don't create an order we can't fulfil. This does NOT
+    # deduct — inventory is only committed at payment verification (Spec Phase-2 §13).
     for item in items:
         if item.quantity > item.product.stock_quantity:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Insufficient stock for {item.product.name}",
+                status.HTTP_409_CONFLICT, detail=f"Insufficient stock for {item.product.name}"
             )
 
     estimate = carbon.estimate_order_carbon(
@@ -66,7 +77,8 @@ def checkout(
         delivery_distance=payload.delivery_distance,
         carbon_impact=estimate["total_carbon"],
         delivery_carbon=estimate["delivery_carbon"],
-        status="Pending",
+        status=order_state.PENDING_PAYMENT,
+        stock_deducted=False,
     )
     db.add(order)
     db.flush()  # get order.id
@@ -81,15 +93,6 @@ def checkout(
                 unit_price=item.product.price,
             )
         )
-        item.product.stock_quantity -= item.quantity  # reduce inventory (Spec §9, §13)
-        # Record purchase signal for the recommender (Spec §10 history input; matrix Note E).
-        db.add(
-            RecommendationInteraction(
-                customer_id=customer.id,
-                product_id=item.product_id,
-                interaction_type="purchase",
-            )
-        )
         response_items.append(
             OrderItemResponse(
                 product_id=item.product_id,
@@ -100,22 +103,46 @@ def checkout(
             )
         )
 
-    # Empty the cart now that it has become an order.
-    for item in items:
-        db.delete(item)
-
     db.commit()
     db.refresh(order)
+    return _to_response(order, response_items)
 
-    return OrderResponse(
-        id=order.id,
-        status=order.status,
-        total_amount=float(order.total_amount),
-        delivery_method=order.delivery_method,
-        delivery_distance=order.delivery_distance,
-        carbon_impact=order.carbon_impact,
-        created_at=order.created_at,
-        items=response_items,
+
+@router.post("/{order_id}/cancel", response_model=OrderResponse)
+def cancel_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    customer: Customer = Depends(get_current_customer),
+) -> OrderResponse:
+    """Customer-initiated cancellation. Restores stock once if it had been committed (§14)."""
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id, Order.customer_id == customer.id)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+    )
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Order not found")
+    if not order_state.can_cancel(order.status):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail=f"Cannot cancel an order that is {order.status}"
+        )
+
+    inventory.restore_for_order(order)  # idempotent: no-op if never deducted
+    order.status = order_state.CANCELLED
+    db.commit()
+    db.refresh(order)
+    return _to_response(
+        order,
+        [
+            OrderItemResponse(
+                product_id=oi.product_id,
+                name=oi.product.name,
+                quantity=oi.quantity,
+                unit_price=float(oi.unit_price),
+                line_total=round(float(oi.unit_price) * oi.quantity, 2),
+            )
+            for oi in order.items
+        ],
     )
 
 
@@ -140,17 +167,11 @@ def get_order(
         .options(selectinload(Order.items).selectinload(OrderItem.product))
     )
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Order not found")
 
-    return OrderResponse(
-        id=order.id,
-        status=order.status,
-        total_amount=float(order.total_amount),
-        delivery_method=order.delivery_method,
-        delivery_distance=order.delivery_distance,
-        carbon_impact=order.carbon_impact,
-        created_at=order.created_at,
-        items=[
+    return _to_response(
+        order,
+        [
             OrderItemResponse(
                 product_id=oi.product_id,
                 name=oi.product.name,

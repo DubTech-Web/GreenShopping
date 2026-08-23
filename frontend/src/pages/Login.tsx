@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../store";
-import { ApiError } from "../api";
+import { api, ApiError } from "../api";
 import { Leaf } from "../components";
 
 export default function Login() {
@@ -11,6 +11,10 @@ export default function Login() {
   const from = (location.state as { from?: string })?.from ?? "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -23,6 +27,25 @@ export default function Login() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally { setBusy(false); }
+  };
+
+  const forgot = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      const response = await api.forgotPassword(email);
+      if (response.dev_code) setResetCode(response.dev_code);
+      setResetMode(true);
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Could not start password reset"); }
+    finally { setBusy(false); }
+  };
+
+  const reset = async () => {
+    setBusy(true); setError("");
+    try {
+      await api.resetPassword(email, resetCode, resetPassword);
+      setResetMode(false); setError("Password updated. You can now log in.");
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Could not reset password"); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -43,12 +66,25 @@ export default function Login() {
         </div>
         <div className="field">
           <label className="label" htmlFor="password">Password</label>
-          <input id="password" className="input" type="password" required autoComplete="current-password"
+          <input id="password" className="input" type={showPassword ? "text" : "password"} required autoComplete="current-password"
             value={password} onChange={(e) => setPassword(e.target.value)} />
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPassword((shown) => !shown)}>
+            {showPassword ? "Hide password" : "Show password"}
+          </button>
         </div>
         <button className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Logging in…" : "Log in"}
         </button>
+        <button type="button" className="btn btn-ghost btn-block" onClick={() => setResetMode((mode) => !mode)}>
+          Forgot password?
+        </button>
+        {resetMode && <div className="panel stack">
+          <strong>Reset password</strong>
+          <button type="button" className="btn btn-accent btn-sm" onClick={forgot} disabled={busy}>Send reset code</button>
+          <input className="input" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6-digit code" required value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ""))} />
+          <input className="input" type="password" minLength={8} placeholder="New password" required value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} />
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={reset}>Update password</button>
+        </div>}
         <p className="muted center-text">No account? <Link to="/register">Create one</Link></p>
       </form>
     </div>

@@ -4,7 +4,7 @@ import { api, ApiError } from "../../api";
 import type { AdminOrderRow } from "../../types";
 import { ErrorNote, money, Spinner } from "../../components";
 
-const STATUSES = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+const STATUSES = ["Pending Payment", "Paid", "Processing", "Shipped", "Delivered", "Cancelled"];
 
 export default function AdminOrders() {
   const [rows, setRows] = useState<AdminOrderRow[] | null>(null);

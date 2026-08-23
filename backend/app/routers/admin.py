@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..config import get_settings
 from ..database import get_db
@@ -23,9 +23,8 @@ from ..schemas import (
     ProductUpdate,
     RestockRow,
 )
-from ..services import inventory
+from ..services import inventory, order_state
 from ..services.inventory import stock_status
-from ..routers.orders import VALID_STATUSES
 
 settings = get_settings()
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -125,11 +124,35 @@ def list_orders(
 def update_order_status(
     order_id: int, payload: OrderStatusUpdate, db: Session = Depends(get_db)
 ) -> AdminOrderRow:
-    if payload.status not in VALID_STATUSES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
-    order = db.get(Order, order_id)
+    """Advance an order through the state machine, keeping inventory consistent (Phase-2 §14, §15).
+
+    Only transitions allowed from the current state are accepted. Cancelling restores stock
+    exactly once (idempotent via Order.stock_deducted); forward transitions never re-deduct,
+    so repeated status changes can't double-count inventory.
+    """
+    if payload.status not in order_state.ALL_STATUSES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid status")
+
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+    )
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    if payload.status == order.status:
+        return AdminOrderRow.model_validate(order)  # no-op, stay idempotent
+
+    if not order_state.admin_can_transition(order.status, payload.status):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"Cannot change order from {order.status} to {payload.status}",
+        )
+
+    if payload.status == order_state.CANCELLED:
+        inventory.restore_for_order(order)  # idempotent restore
+
     order.status = payload.status
     db.commit()
     db.refresh(order)

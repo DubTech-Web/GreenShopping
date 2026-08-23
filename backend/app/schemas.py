@@ -20,9 +20,46 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class ResendCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ProfileUpdate(BaseModel):
+    """Only the name is editable; email is the login identity and account status is system-set."""
+
+    name: str = Field(min_length=1, max_length=120)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class MessageResponse(BaseModel):
+    """Generic acknowledgement for flows that must not leak state (e.g. code sent).
+
+    ``dev_code`` is populated ONLY in non-production when Resend is disabled, so a developer can
+    complete the flow without a mail provider. It is never present in production (Spec §2, §5).
+    """
+
+    message: str
+    dev_code: str | None = None
+    cooldown_seconds: int | None = None
 
 
 class CustomerResponse(BaseModel):
@@ -31,6 +68,8 @@ class CustomerResponse(BaseModel):
     name: str
     email: EmailStr
     is_admin: bool
+    is_verified: bool
+    created_at: datetime
 
 
 # ---- Products (compact summary for lists vs. full detail) ----
@@ -40,6 +79,7 @@ class ProductSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    image_url: str
     category: str
     price: float
     stock_quantity: int
@@ -59,6 +99,7 @@ class RecommendationItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    image_url: str
     category: str
     price: float
     eco_score: int
@@ -182,9 +223,29 @@ class OrderSummary(BaseModel):
     created_at: datetime
 
 
+# ---- Payments (Paystack, fixed ₦100 demo charge — Spec Phase-2 §9–§12) ----
+class PaymentInitRequest(BaseModel):
+    order_id: int
+
+
+class PaymentInitResponse(BaseModel):
+    reference: str
+    amount_kobo: int  # backend-authoritative; always PAYMENT_AMOUNT_KOBO, never the cart total
+    public_key: str
+    email: EmailStr
+    simulated: bool  # True in dev/simulation mode (no real charge)
+    authorization_url: str | None = None
+    access_code: str | None = None
+
+
+class PaymentVerifyRequest(BaseModel):
+    reference: str = Field(min_length=1, max_length=100)
+
+
 # ---- Admin: product management, order status, inventory (Spec §13, §14) ----
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    image_url: str = Field(default="", max_length=500)
     description: str = Field(default="", max_length=2000)
     category: str = Field(min_length=1, max_length=80)
     price: float = Field(gt=0)
@@ -200,6 +261,7 @@ class ProductUpdate(BaseModel):
     """All fields optional — only provided fields are changed (no full-row rewrite)."""
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    image_url: str | None = Field(default=None, max_length=500)
     description: str | None = Field(default=None, max_length=2000)
     category: str | None = Field(default=None, min_length=1, max_length=80)
     price: float | None = Field(default=None, gt=0)

@@ -70,7 +70,7 @@ def list_categories(db: Session = Depends(get_db)) -> list[str]:
 def _to_item(scored: ScoredProduct) -> RecommendationItem:
     p = scored.product
     return RecommendationItem(
-        id=p.id, name=p.name, category=p.category, price=float(p.price),
+        id=p.id, name=p.name, image_url=p.image_url, category=p.category, price=float(p.price),
         eco_score=p.eco_score, is_eco_friendly=p.is_eco_friendly,
         carbon_factor=p.carbon_factor, score=scored.score, reason=scored.reason,
     )
@@ -115,7 +115,7 @@ def get_product(
     eco_alt = recommender.find_eco_alternative(product, candidates)
 
     return ProductDetailWithRecs(
-        id=product.id, name=product.name, category=product.category, price=float(product.price),
+        id=product.id, name=product.name, image_url=product.image_url, category=product.category, price=float(product.price),
         stock_quantity=product.stock_quantity, eco_score=product.eco_score,
         is_eco_friendly=product.is_eco_friendly, description=product.description,
         weight=product.weight, carbon_factor=product.carbon_factor,
