@@ -226,6 +226,7 @@ class OrderSummary(BaseModel):
 # ---- Payments (Paystack, fixed ₦100 demo charge — Spec Phase-2 §9–§12) ----
 class PaymentInitRequest(BaseModel):
     order_id: int
+    callback_url: str | None = None
 
 
 class PaymentInitResponse(BaseModel):

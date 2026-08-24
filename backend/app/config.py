@@ -35,12 +35,21 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
-    # ---- Email verification (Resend) — Spec Phase-2 §1, §2, §5 ----
-    resend_api_key: str = ""     # empty -> dev mode: code is NOT emailed, surfaced to server log
+    # ---- Email verification & notifications (SMTP / Resend) — Spec Phase-2 §1, §2, §5 ----
+    resend_api_key: str = ""     # empty -> dev mode or SMTP mode
     resend_from_email: str = "GreenShopping <onboarding@resend.dev>"
     verification_code_ttl_minutes: int = 10
     verification_resend_cooldown_seconds: int = 60
     verification_max_attempts: int = 5
+
+    # SMTP fallback / standard email provider (e.g. Gmail SMTP with App Password)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
 
     # ---- Paystack payments — Spec Phase-2 §9–§12 ----
     paystack_secret_key: str = ""  # empty -> simulation mode (no real charge); tests run offline
@@ -64,8 +73,16 @@ class Settings(BaseSettings):
         return origins
 
     @property
+    def smtp_enabled(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_password)
+
+    @property
     def resend_enabled(self) -> bool:
         return bool(self.resend_api_key)
+
+    @property
+    def email_delivery_enabled(self) -> bool:
+        return self.smtp_enabled or self.resend_enabled
 
     @property
     def paystack_enabled(self) -> bool:

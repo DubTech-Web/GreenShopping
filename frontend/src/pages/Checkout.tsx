@@ -47,7 +47,8 @@ export default function Checkout() {
     setPlacing(true); setError("");
     try {
       const order = await api.checkout(method, distance);
-      const payment = await api.initPayment(order.id);
+      const callbackUrl = `${window.location.origin}/orders/${order.id}`;
+      const payment = await api.initPayment(order.id, callbackUrl);
       if (!payment.simulated && payment.authorization_url) {
         window.location.assign(payment.authorization_url);
         return;

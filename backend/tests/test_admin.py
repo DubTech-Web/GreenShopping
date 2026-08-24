@@ -10,7 +10,7 @@ from tests.conftest import auth_header, register
 def _make_admin(client, email="admin@example.com"):
     db = next(client.app.dependency_overrides[get_db]())
     admin = Customer(name="Admin", email=email, password_hash=hash_password("adminpass123"),
-                     is_admin=True)
+                     is_admin=True, is_verified=True)
     db.add(admin)
     db.commit()
     resp = client.post("/api/auth/login", json={"email": email, "password": "adminpass123"})
@@ -98,15 +98,23 @@ def test_restock_endpoint_flags_low_stock(client):
 
 def test_admin_update_order_status(client):
     token = _make_admin(client)
-    # Create an order as a customer first.
+    # Create an order as a customer first and pay.
     cust = register(client, email="c@example.com")
     pid = _add_product(client, stock_quantity=10)
     client.post("/api/cart/items", json={"product_id": pid, "quantity": 1}, headers=auth_header(cust))
     order = client.post("/api/orders", json={"delivery_method": "eco", "delivery_distance": 10},
                         headers=auth_header(cust)).json()
-    resp = client.patch(f"/api/admin/orders/{order['id']}", json={"status": "Shipped"},
-                        headers=auth_header(token))
-    assert resp.status_code == 200 and resp.json()["status"] == "Shipped"
+    init = client.post("/api/payments/init", json={"order_id": order["id"]}, headers=auth_header(cust)).json()
+    client.post("/api/payments/verify", json={"reference": init["reference"]}, headers=auth_header(cust))
+
+    # Transition Paid -> Processing -> Shipped
+    resp_proc = client.patch(f"/api/admin/orders/{order['id']}", json={"status": "Processing"},
+                             headers=auth_header(token))
+    assert resp_proc.status_code == 200 and resp_proc.json()["status"] == "Processing"
+
+    resp_ship = client.patch(f"/api/admin/orders/{order['id']}", json={"status": "Shipped"},
+                             headers=auth_header(token))
+    assert resp_ship.status_code == 200 and resp_ship.json()["status"] == "Shipped"
 
 
 def test_admin_invalid_order_status_rejected(client):

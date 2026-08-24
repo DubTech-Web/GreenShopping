@@ -46,7 +46,7 @@ export default function ProductDetail() {
       <Link to="/products" className="muted">← Back to products</Link>
 
       <div className="card card-pad" style={{ display: "grid", gap: 24, gridTemplateColumns: "minmax(0,1fr) minmax(0,1.2fr)" }}>
-        <div className="product-thumb" style={{ borderRadius: "var(--radius)", minHeight: 240 }}>
+        <div className="product-detail-thumb">
           <ProductImage imageUrl={p.image_url} name={p.name} critical />
         </div>
         <div className="stack">

@@ -12,7 +12,7 @@ from tests.conftest import auth_header, register
 def _admin_token(client):
     db = next(client.app.dependency_overrides[get_db]())
     db.add(Customer(name="Admin", email="admin@example.com",
-                    password_hash=hash_password("adminpass123"), is_admin=True))
+                    password_hash=hash_password("adminpass123"), is_admin=True, is_verified=True))
     db.commit()
     return client.post("/api/auth/login",
                        json={"email": "admin@example.com", "password": "adminpass123"}
@@ -33,8 +33,12 @@ def _product(client, **kw):
 def _order(client, token, pid, qty, method, distance):
     client.post("/api/cart/items", json={"product_id": pid, "quantity": qty},
                 headers=auth_header(token))
-    return client.post("/api/orders", json={"delivery_method": method, "delivery_distance": distance},
-                       headers=auth_header(token))
+    ord_resp = client.post("/api/orders", json={"delivery_method": method, "delivery_distance": distance},
+                           headers=auth_header(token))
+    order_id = ord_resp.json()["id"]
+    init = client.post("/api/payments/init", json={"order_id": order_id}, headers=auth_header(token)).json()
+    client.post("/api/payments/verify", json={"reference": init["reference"]}, headers=auth_header(token))
+    return ord_resp
 
 
 def _build_fixture(client):

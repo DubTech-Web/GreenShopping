@@ -83,11 +83,16 @@ def test_customer_specific_excludes_purchased(client):
     """Signed-in customer who bought the steel bottle no longer sees it recommended."""
     standard_id, steel_id = _seed_pair(client)
     token = register(client, email="buyer@example.com")
-    # Buy the steel bottle.
+    # Buy the steel bottle and complete payment so interaction is recorded.
     client.post("/api/cart/items", json={"product_id": steel_id, "quantity": 1},
                 headers=auth_header(token))
-    client.post("/api/orders", json={"delivery_method": "eco", "delivery_distance": 10},
+    ord_resp = client.post("/api/orders", json={"delivery_method": "eco", "delivery_distance": 10},
+                           headers=auth_header(token))
+    init = client.post("/api/payments/init", json={"order_id": ord_resp.json()["id"]},
+                       headers=auth_header(token)).json()
+    client.post("/api/payments/verify", json={"reference": init["reference"]},
                 headers=auth_header(token))
+
     body = client.get(f"/api/products/{standard_id}", headers=auth_header(token)).json()
     rec_ids = [r["id"] for r in body["recommendations"]]
     assert steel_id not in rec_ids  # already purchased -> excluded

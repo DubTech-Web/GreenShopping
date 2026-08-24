@@ -13,8 +13,6 @@ import jwt
 
 from ..config import get_settings
 
-settings = get_settings()
-
 _PBKDF2_ROUNDS = 200_000  # OWASP-aligned work factor for PBKDF2-HMAC-SHA256
 _SALT_BYTES = 16
 
@@ -42,6 +40,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def create_access_token(*, customer_id: int, is_admin: bool) -> str:
+    settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {"sub": str(customer_id), "is_admin": is_admin, "exp": expire}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
@@ -49,4 +48,5 @@ def create_access_token(*, customer_id: int, is_admin: bool) -> str:
 
 def decode_access_token(token: str) -> dict:
     """Decode/verify a token. Raises jwt.PyJWTError on invalid/expired tokens."""
+    settings = get_settings()
     return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])

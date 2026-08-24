@@ -87,8 +87,8 @@ export const api = {
   // Orders
   checkout: (delivery_method: string, delivery_distance: number) =>
     request<Order>("/api/orders", { method: "POST", body: body({ delivery_method, delivery_distance }) }),
-  initPayment: (order_id: number) =>
-    request<PaymentInit>("/api/payments/init", { method: "POST", body: body({ order_id }) }),
+  initPayment: (order_id: number, callback_url?: string) =>
+    request<PaymentInit>("/api/payments/init", { method: "POST", body: body({ order_id, callback_url }) }),
   verifyPayment: (reference: string) =>
     request<Order>("/api/payments/verify", { method: "POST", body: body({ reference }) }),
   orders: () => request<OrderSummary[]>("/api/orders"),

@@ -1,4 +1,4 @@
-"""Email verification codes + Resend delivery (Spec Phase-2 §1, §2, §5, §6).
+"""Email verification codes + delivery (Spec Phase-2 §1, §2, §5, §6).
 
 Security properties (Spec §2):
 - Codes are generated with the ``secrets`` CSPRNG, 6 digits.
@@ -6,25 +6,29 @@ Security properties (Spec §2):
 - Codes expire and are single-use (consumed on success).
 - A per-purpose attempt cap and a resend cooldown throttle brute force / abuse.
 
-Delivery: when ``RESEND_API_KEY`` is set, the code is emailed via Resend's REST API (no SDK
-dependency — one ``httpx`` POST). When it is unset (local dev / tests) nothing is emailed;
-instead the caller may surface a ``dev_code`` in the response, but ONLY in non-production with
-Resend disabled (see routers/auth). Codes are never logged in production (Spec §2).
+Delivery (``send_email``): SMTP first (e.g. free Gmail App Password, which delivers to any
+recipient with no custom domain), then Resend as a fallback. When neither is configured
+(local dev / tests) nothing is emailed; instead the caller may surface a ``dev_code`` in the
+response, but ONLY in non-production with no email provider (see routers/auth). Delivery never
+raises to the caller and codes are never logged in production (Spec §2, §6).
 """
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
+import smtplib
 from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import VerificationCode
+from ..models import Order, VerificationCode
 
-settings = get_settings()
+logger = logging.getLogger("greenshopping.email")
 
 _RESEND_ENDPOINT = "https://api.resend.com/emails"
 _TIMEOUT = httpx.Timeout(15.0)
@@ -53,6 +57,7 @@ def _as_aware(dt: datetime) -> datetime:
 
 def cooldown_remaining(db: Session, customer_id: int, purpose: str) -> int:
     """Seconds left before another code may be requested (0 if allowed now) — Spec §2."""
+    settings = get_settings()
     latest = db.scalar(
         select(VerificationCode)
         .where(VerificationCode.customer_id == customer_id, VerificationCode.purpose == purpose)
@@ -72,6 +77,7 @@ def issue_code(db: Session, customer_id: int, purpose: str) -> str:
     Returns the plaintext code so the caller can email it (or surface it in dev). Does NOT
     commit — the caller owns the transaction.
     """
+    settings = get_settings()
     # Invalidate older outstanding codes so only the newest is ever valid (single active code).
     for old in db.scalars(
         select(VerificationCode).where(
@@ -100,6 +106,7 @@ def verify_code(db: Session, customer_id: int, purpose: str, code: str) -> bool:
     Consumes the code on success. On failure, increments the attempt counter and consumes the
     code once the cap is hit (forcing the user to request a new one). Does NOT commit.
     """
+    settings = get_settings()
     record = db.scalar(
         select(VerificationCode)
         .where(
@@ -128,36 +135,190 @@ def verify_code(db: Session, customer_id: int, purpose: str, code: str) -> bool:
     return True
 
 
-def send_code_email(to_email: str, code: str, purpose: str) -> None:
-    """Email the code via Resend. No-op when Resend is not configured (dev/test).
+def _format_money(amount: float) -> str:
+    return f"₦{amount:,.2f}"
 
-    Failures are swallowed (logged, not raised) so a transient email outage cannot 500 a
-    registration and cannot be used to probe which emails exist (Spec §6 enumeration note).
+
+def send_email(to_email: str, subject: str, html_content: str) -> bool:
+    """Send an HTML email via SMTP (primary) or Resend, with clear server logging.
+
+    Returns True if sent successfully, False otherwise (never raises exceptions to caller):
+    a transient mail outage must never 500 a registration or reveal which addresses exist.
     """
-    if not settings.resend_enabled:
-        return
+    settings = get_settings()
+    # 1. Try SMTP if configured (e.g. Gmail App Password, Mailgun, SendGrid)
+    if settings.smtp_enabled:
+        try:
+            msg = EmailMessage()
+            msg["Subject"] = subject
+            msg["From"] = settings.smtp_from_email or f"GreenShopping <{settings.smtp_user}>"
+            msg["To"] = to_email
+            msg.set_content("Please view this email in an HTML-compatible email client.")
+            msg.add_alternative(html_content, subtype="html")
+
+            if settings.smtp_use_ssl or settings.smtp_port == 465:
+                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                    server.login(settings.smtp_user, settings.smtp_password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                    if settings.smtp_use_tls:
+                        server.starttls()
+                    server.login(settings.smtp_user, settings.smtp_password)
+                    server.send_message(msg)
+            logger.info("Successfully sent email via SMTP to %s (Subject: '%s')", to_email, subject)
+            return True
+        except Exception as exc:
+            logger.warning("SMTP delivery to %s failed: %s", to_email, exc)
+
+    # 2. Try Resend if configured
+    if settings.resend_enabled:
+        try:
+            with httpx.Client(timeout=_TIMEOUT) as http:
+                resp = http.post(
+                    _RESEND_ENDPOINT,
+                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    json={
+                        "from": settings.resend_from_email,
+                        "to": [to_email],
+                        "subject": subject,
+                        "html": html_content,
+                    },
+                )
+                if resp.is_success:
+                    logger.info("Successfully sent email via Resend to %s", to_email)
+                    return True
+                else:
+                    logger.warning(
+                        "Resend API error (%s): %s. (Note: Resend test mode only allows sending to account owner unless domain is verified)",
+                        resp.status_code,
+                        resp.text,
+                    )
+        except Exception as exc:
+            logger.warning("Resend delivery network error for %s: %s", to_email, exc)
+
+    # 3. Development fallback
+    if not settings.is_production:
+        logger.info("[DEV EMAIL] To: %s | Subject: '%s'", to_email, subject)
+
+    return False
+
+
+def send_code_email(to_email: str, code: str, purpose: str) -> None:
+    """Email the code via configured provider (SMTP primary, Resend fallback)."""
+    settings = get_settings()
+    # Log the verification code in non-production so devs/testers are never locked out.
+    if not settings.is_production:
+        logger.info("[AUTH CODE] Code for %s (%s): %s", to_email, purpose, code)
 
     ttl = settings.verification_code_ttl_minutes
     action = "verify your email" if purpose == EMAIL_VERIFY else "reset your password"
-    html = (
-        f"<div style='font-family:system-ui,sans-serif;font-size:16px;color:#1c2b16'>"
-        f"<p>Use this code to {action}:</p>"
-        f"<p style='font-size:28px;font-weight:700;letter-spacing:4px'>{code}</p>"
-        f"<p>It expires in {ttl} minutes. If you didn't request this, you can ignore this email.</p>"
-        f"</div>"
-    )
-    try:
-        with httpx.Client(timeout=_TIMEOUT) as http:
-            http.post(
-                _RESEND_ENDPOINT,
-                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-                json={
-                    "from": settings.resend_from_email,
-                    "to": [to_email],
-                    "subject": _SUBJECTS[purpose],
-                    "html": html,
-                },
-            ).raise_for_status()
-    except httpx.HTTPError:
-        # Deliberately silent: never reveal delivery success/failure to the caller.
-        pass
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>{_SUBJECTS.get(purpose, 'GreenShopping Code')}</title></head>
+    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f4f6f0;margin:0;padding:24px;color:#1c2b16;">
+      <div style="max-width:540px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e1e7d5;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="background:#284320;color:#ffffff;padding:24px;text-align:center;">
+          <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em;">🌿 GreenShopping</h1>
+        </div>
+        <div style="padding:32px 24px;">
+          <h2 style="margin-top:0;font-size:18px;color:#1c2b16;">Your Verification Code</h2>
+          <p style="color:#4a5b44;font-size:15px;line-height:1.5;">Use the 6-digit code below to {action}:</p>
+          <div style="background:#edf3e5;border:1.5px dashed #7ea367;border-radius:8px;padding:16px;text-align:center;margin:24px 0;">
+            <span style="font-size:32px;font-weight:700;letter-spacing:8px;color:#284320;font-family:monospace;">{code}</span>
+          </div>
+          <p style="color:#6b7c65;font-size:13px;line-height:1.4;">
+            This code expires in <strong>{ttl} minutes</strong>. If you did not request this, please safely ignore this email.
+          </p>
+        </div>
+        <div style="background:#f9faf6;padding:16px;text-align:center;font-size:12px;color:#8a9984;border-top:1px solid #edf0e7;">
+          GreenShopping · AI-Powered Sustainable E-Commerce
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    send_email(to_email, _SUBJECTS.get(purpose, "Your GreenShopping code"), html)
+
+
+def send_order_confirmation_email(order: Order, customer_email: str) -> None:
+    """Send an itemized order confirmation email with sustainable receipt details."""
+    subject = f"Order #{order.id} Confirmed - GreenShopping Receipt 🌿"
+
+    items_rows = ""
+    for item in order.items:
+        line_total = float(item.unit_price) * item.quantity
+        items_rows += f"""
+        <tr style="border-bottom:1px solid #edf0e7;">
+          <td style="padding:10px 8px;font-size:14px;color:#1c2b16;">{item.product.name}</td>
+          <td style="padding:10px 8px;font-size:14px;color:#4a5b44;text-align:center;">{item.quantity}</td>
+          <td style="padding:10px 8px;font-size:14px;color:#4a5b44;text-align:right;">{_format_money(float(item.unit_price))}</td>
+          <td style="padding:10px 8px;font-size:14px;color:#1c2b16;font-weight:600;text-align:right;">{_format_money(line_total)}</td>
+        </tr>
+        """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>{subject}</title></head>
+    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f4f6f0;margin:0;padding:24px;color:#1c2b16;">
+      <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e1e7d5;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+        <div style="background:#284320;color:#ffffff;padding:24px 28px;text-align:center;">
+          <h1 style="margin:0;font-size:22px;font-weight:700;">🌿 GreenShopping</h1>
+          <p style="margin:6px 0 0;font-size:14px;color:#d7e6ae;">Thank you for shopping sustainably!</p>
+        </div>
+        <div style="padding:28px 24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:2px solid #edf0e7;padding-bottom:16px;">
+            <div>
+              <h2 style="margin:0;font-size:18px;color:#1c2b16;">Order #{order.id}</h2>
+              <span style="display:inline-block;margin-top:4px;padding:3px 10px;background:#edf3e5;color:#284320;border-radius:999px;font-size:12px;font-weight:700;">Status: Paid</span>
+            </div>
+            <div style="text-align:right;color:#6b7c65;font-size:13px;">
+              Date: {order.created_at.strftime('%b %d, %Y')}
+            </div>
+          </div>
+
+          <h3 style="font-size:15px;color:#1c2b16;margin:16px 0 8px;">Purchased Items</h3>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <thead>
+              <tr style="background:#f7f9f3;border-bottom:1.5px solid #e1e7d5;font-size:12px;text-transform:uppercase;color:#6b7c65;">
+                <th style="padding:8px;text-align:left;">Item</th>
+                <th style="padding:8px;text-align:center;">Qty</th>
+                <th style="padding:8px;text-align:right;">Price</th>
+                <th style="padding:8px;text-align:right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items_rows}
+            </tbody>
+          </table>
+
+          <div style="background:#f7f9f3;border-radius:8px;padding:16px;margin:20px 0;border:1px solid #e5ecd9;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;">
+              <span style="color:#4a5b44;">Delivery Method:</span>
+              <strong style="text-transform:capitalize;color:#1c2b16;">{order.delivery_method} ({order.delivery_distance} km)</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:14px;">
+              <span style="color:#4a5b44;">Estimated Carbon Impact:</span>
+              <strong style="color:#3e6b2e;">{order.carbon_impact:.2f} kg CO₂e</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0 0;margin-top:6px;border-top:1.5px solid #e1e7d5;font-size:16px;">
+              <span style="font-weight:700;color:#1c2b16;">Total Amount Paid:</span>
+              <strong style="font-size:18px;color:#1c2b16;">{_format_money(float(order.total_amount))}</strong>
+            </div>
+          </div>
+
+          <p style="color:#6b7c65;font-size:13px;line-height:1.4;margin-top:20px;">
+            Your order is being processed for dispatch. You can track your order status anytime on your GreenShopping dashboard.
+          </p>
+        </div>
+        <div style="background:#f9faf6;padding:16px;text-align:center;font-size:12px;color:#8a9984;border-top:1px solid #edf0e7;">
+          GreenShopping · Delivering thoughtful choices with a lighter footprint 🌱
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    send_email(customer_email, subject, html)
+

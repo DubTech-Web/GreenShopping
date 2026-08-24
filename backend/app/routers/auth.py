@@ -39,7 +39,6 @@ from ..schemas import (
 from ..services import email as email_service
 from ..services.security import create_access_token, hash_password, verify_password
 
-settings = get_settings()
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Generic acknowledgement reused so responses don't reveal whether an email exists (Spec §6).
@@ -47,12 +46,14 @@ _GENERIC_SENT = "If that account exists and is eligible, a code has been sent."
 
 
 def _dev_code(code: str) -> str | None:
-    """Surface the code to the client ONLY in non-production with Resend disabled (Spec §5).
+    """Surface the code to the client ONLY in non-production with no email provider (Spec §5).
 
-    In production Resend is enabled and APP_ENV=production, so this always returns None and the
-    code travels solely by email.
+    In real dev (Gmail SMTP configured) and in production, the code travels solely by email;
+    this returns None. It is populated only for local/CI runs with no SMTP/Resend, so the flow
+    stays completable offline (see tests) without ever leaking codes once email is wired up.
     """
-    return code if (not settings.is_production and not settings.resend_enabled) else None
+    settings = get_settings()
+    return code if (not settings.is_production and not settings.email_delivery_enabled) else None
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -117,7 +118,7 @@ def resend_code(payload: ResendCodeRequest, db: Session = Depends(get_db)) -> Me
     return MessageResponse(
         message="A new code has been sent.",
         dev_code=_dev_code(code),
-        cooldown_seconds=settings.verification_resend_cooldown_seconds,
+        cooldown_seconds=get_settings().verification_resend_cooldown_seconds,
     )
 
 

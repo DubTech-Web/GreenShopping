@@ -25,7 +25,7 @@ from ..schemas import (
     PaymentInitResponse,
     PaymentVerifyRequest,
 )
-from ..services import inventory, order_state
+from ..services import email as email_service, inventory, order_state
 from ..services import payments as paystack
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
@@ -54,7 +54,11 @@ def init_payment(
             status.HTTP_409_CONFLICT, detail=f"Order is not awaiting payment (it is {order.status})"
         )
 
-    init = paystack.initialize(email=customer.email, order_id=order.id)
+    init = paystack.initialize(
+        email=customer.email,
+        order_id=order.id,
+        callback_url=payload.callback_url,
+    )
     order.payment_reference = init.reference  # so verify can find this order by reference
     db.commit()
 
@@ -114,6 +118,10 @@ def verify_payment(
 
     db.commit()
     db.refresh(order)
+
+    # Dispatch itemized order confirmation email
+    email_service.send_order_confirmation_email(order, customer.email)
+
     return _order_response(order)
 
 

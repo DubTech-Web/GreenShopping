@@ -29,12 +29,20 @@ def test_checkout_creates_order_and_reduces_inventory(client):
     assert resp.status_code == 201, resp.text
     order = resp.json()
     assert order["total_amount"] == 30.0
-    assert order["status"] == "Pending"
+    assert order["status"] == "Pending Payment"
     assert order["carbon_impact"] > 0
 
-    # Inventory reduced 10 -> 7.
+    # Before payment: inventory still 10
+    assert client.get(f"/api/products/{pid}").json()["stock_quantity"] == 10
+
+    # Pay & verify
+    init = client.post("/api/payments/init", json={"order_id": order["id"]}, headers=auth_header(token)).json()
+    paid = client.post("/api/payments/verify", json={"reference": init["reference"]}, headers=auth_header(token)).json()
+    assert paid["status"] == "Paid"
+
+    # Inventory reduced 10 -> 7 after payment
     assert client.get(f"/api/products/{pid}").json()["stock_quantity"] == 7
-    # Cart emptied.
+    # Cart emptied after payment
     assert client.get("/api/cart", headers=auth_header(token)).json()["item_count"] == 0
 
 

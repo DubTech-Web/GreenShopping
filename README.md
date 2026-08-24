@@ -112,9 +112,10 @@ npm run dev                  # http://127.0.0.1:5173
 
 The second-phase checkout uses a backend-authoritative Paystack demonstration charge of
 ₦100 (`PAYMENT_AMOUNT_KOBO=10000`), independent of the displayed product and cart prices.
-With no Paystack or Resend keys configured, local development uses offline payment and
-verification-code simulation; production requires both services and never returns codes to
-the client.
+With no payment or email provider configured, local development uses offline payment and
+verification-code simulation (the code is returned in the API response); once an email
+provider (Gmail SMTP or Resend) is set, codes are emailed and never returned to the client,
+and production requires both a payment and an email provider.
 
 Product cards use optimized Unsplash photographs (`640px`, quality `75`) with lazy loading;
 the primary product-detail image loads eagerly. This keeps the repository small while using
@@ -129,10 +130,15 @@ credentials, and Paystack credentials. [`render.yaml`](render.yaml) contains the
 Render web-service definition. The backend creates the schema on startup; run
 `python -m app.seed` once against a fresh managed database when sample data is needed.
 
-Resend setup: create an API key, verify the sending domain (or use the approved development
-sender), then set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` on Render. Paystack setup: create
-test/live keys, set the secret and public keys on the backend, and keep the fixed
-`PAYMENT_AMOUNT_KOBO=10000` value unchanged for this assignment.
+Email setup (verification codes + order receipts): the backend tries **SMTP first, then
+Resend**, and falls back to a dev code (surfaced in the API response, non-production only) when
+neither is set. The recommended free option that delivers to **any** recipient with no custom
+domain is **Gmail SMTP with an App Password**: enable 2-Step Verification on the Google
+account, create an App Password, then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`,
+`SMTP_USER`, `SMTP_PASSWORD` (the App Password), and `SMTP_FROM_EMAIL`. Resend is an optional
+alternative, but its free tier only delivers to the account owner unless a custom domain is
+verified. Paystack setup: create test/live keys, set the secret and public keys on the backend,
+and keep the fixed `PAYMENT_AMOUNT_KOBO=10000` value unchanged for this assignment.
 
 ### Migrating SQLite to PostgreSQL
 

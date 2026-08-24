@@ -3,19 +3,28 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
 import type { Order } from "../types";
 import { ErrorNote, money, Spinner } from "../components";
+import { useApp } from "../store";
 
 export default function OrderConfirmation() {
   const { id } = useParams();
   const location = useLocation();
+  const { refreshCart } = useApp();
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const reference = new URLSearchParams(location.search).get("reference");
+    const params = new URLSearchParams(location.search);
+    const reference = params.get("reference") || params.get("trxref");
     const load = reference ? api.verifyPayment(reference) : api.order(Number(id));
-    load.then(setOrder).catch((e) => setError(e.message)).finally(() => setLoading(false));
-  }, [id, location.search]);
+    load
+      .then((ord) => {
+        setOrder(ord);
+        refreshCart();
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [id, location.search, refreshCart]);
 
   if (loading) return <Spinner />;
   if (error) return <ErrorNote message={error} />;
@@ -27,6 +36,9 @@ export default function OrderConfirmation() {
         <div style={{ fontSize: "2.6rem" }}>✅</div>
         <h1 style={{ margin: 0 }}>Order confirmed</h1>
         <p className="muted">Order #{order.id} · {order.status}</p>
+        <div className="badge badge-eco" style={{ margin: "0 auto", padding: "6px 14px" }}>
+          📧 A confirmation receipt has been sent to your email
+        </div>
       </div>
 
       <div className="card card-pad stack">

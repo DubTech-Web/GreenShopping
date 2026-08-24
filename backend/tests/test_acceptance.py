@@ -6,13 +6,13 @@ final acceptance test names. One test, one story.
 from app.database import get_db
 from app.models import Customer
 from app.services.security import hash_password
-from tests.conftest import auth_header
+from tests.conftest import auth_header, register
 
 
 def _make_admin(client):
     db = next(client.app.dependency_overrides[get_db]())
     db.add(Customer(name="Admin", email="admin@example.com",
-                    password_hash=hash_password("adminpass123"), is_admin=True))
+                    password_hash=hash_password("adminpass123"), is_admin=True, is_verified=True))
     db.commit()
     return client.post("/api/auth/login",
                        json={"email": "admin@example.com", "password": "adminpass123"}
@@ -38,10 +38,8 @@ def _seed_catalog(client):
 def test_full_acceptance_workflow(client):
     admin, std_id = _seed_catalog(client)
 
-    # 1. Customer registers.
-    token = client.post("/api/auth/register", json={
-        "name": "Journey User", "email": "journey@example.com", "password": "password123",
-    }).json()["access_token"]
+    # 1. Customer registers + verifies.
+    token = register(client, email="journey@example.com", password="password123", name="Journey User")
     hdr = auth_header(token)
 
     # 2. Customer logs in (implicit — token issued). 3. Browses products.
@@ -65,11 +63,16 @@ def test_full_acceptance_workflow(client):
     assert len(estimate["options"]) == 3
     assert estimate["recommended"] == "eco"  # greener, not cheapest-only
 
-    # 12. Places order.
+    # 12. Places order & completes payment.
     order = client.post("/api/orders", json={"delivery_method": "eco", "delivery_distance": 100},
                         headers=hdr).json()
     assert order["carbon_impact"] > 0
     assert order["total_amount"] == 10.0  # 2 x 5.0
+
+    init = client.post("/api/payments/init", json={"order_id": order["id"]}, headers=hdr).json()
+    assert init["reference"]
+    paid_order = client.post("/api/payments/verify", json={"reference": init["reference"]}, headers=hdr).json()
+    assert paid_order["status"] == "Paid"
 
     # 13. Inventory decreases (10 - 2 = 8). 14. Order recorded.
     assert client.get(f"/api/products/{std_id}").json()["stock_quantity"] == 8

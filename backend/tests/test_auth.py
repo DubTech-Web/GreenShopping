@@ -8,7 +8,11 @@ def test_register_returns_token(client):
         json={"name": "Ada", "email": "ada@example.com", "password": "password123"},
     )
     assert resp.status_code == 201
-    assert resp.json()["access_token"]
+    code = resp.json()["dev_code"]
+    assert code
+    verify_resp = client.post("/api/auth/verify-email", json={"email": "ada@example.com", "code": code})
+    assert verify_resp.status_code == 200
+    assert verify_resp.json()["access_token"]
 
 
 def test_register_duplicate_email_rejected(client):
