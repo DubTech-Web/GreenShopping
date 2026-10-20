@@ -50,6 +50,14 @@ order_carbon    = product_carbon + delivery_carbon
 All figures are **estimates** with documented factors (see below), shown before checkout and
 stored on the order for reporting. No claims of exact real-world emissions are made.
 
+Checkout requests the customer's location through the browser only after they select **Use my
+current location**. The server calculates straight-line distance from the representative
+Abuja dispatch point (9.05785, 7.49508) and applies a 1.3 road-distance allowance as a rough
+route estimate. It does not query a maps provider, so the coordinates are not shared with a
+third party; they are not stored on the order. Only the estimated route kilometres and carbon
+estimate are retained. This allowance is not a substitute for carrier route data and can vary
+from the actual road route.
+
 ## 5. Green delivery methodology (Spec §11, G1)
 
 Three static options (no DB table needed):

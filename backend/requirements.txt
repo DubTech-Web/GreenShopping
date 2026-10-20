@@ -6,6 +6,6 @@ sqlalchemy==2.0.52
 pydantic[email]==2.13.4
 pydantic-settings==2.15.0
 PyJWT==2.13.0          # HS256 JWT, pure-Python — avoids compiling `cryptography`
-httpx==0.28.1          # outbound Resend + Paystack REST calls, and the test client
+httpx==0.28.1          # outbound Brevo + Paystack REST calls, and the test client
 psycopg[binary]==3.2.10  # PostgreSQL driver for production; unused when DATABASE_URL is sqlite
 pytest==9.1.1

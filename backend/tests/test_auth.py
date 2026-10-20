@@ -1,5 +1,25 @@
 """Authentication tests (Spec §9 → Authentication: registration, login, invalid credentials)."""
+from app.config import Settings
 from tests.conftest import auth_header, register
+
+
+def test_register_reports_unavailable_email_delivery(client, monkeypatch):
+    settings = Settings(
+        app_env="production",
+        smtp_host="smtp.gmail.com",
+        smtp_user="sender@gmail.com",
+        smtp_password="test-password",
+    )
+    monkeypatch.setattr("app.routers.auth.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.email.send_code_email", lambda *_args: False)
+
+    response = client.post(
+        "/api/auth/register",
+        json={"name": "Ada", "email": "ada@example.com", "password": "password123"},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Email delivery is temporarily unavailable. Please try again later."
 
 
 def test_register_returns_token(client):

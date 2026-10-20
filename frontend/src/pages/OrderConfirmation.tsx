@@ -33,19 +33,15 @@ export default function OrderConfirmation() {
   return (
     <div className="stack" style={{ maxWidth: 640, margin: "0 auto" }}>
       <div className="card card-pad center-text stack">
-        <div style={{ fontSize: "2.6rem" }}>✅</div>
-        <h1 style={{ margin: 0 }}>Order confirmed</h1>
-        <p className="muted">Order #{order.id} · {order.status}</p>
-        <div className="badge badge-eco" style={{ margin: "0 auto", padding: "6px 14px" }}>
-          📧 A confirmation receipt has been sent to your email
-        </div>
+        <h1 style={{ margin: 0 }}>Order #{order.id} details</h1>
+        <p className="muted">Placed {new Date(order.created_at).toLocaleString()} · <span style={{ textTransform: "capitalize" }}>{order.status}</span></p>
       </div>
 
       <div className="card card-pad stack">
         <h2 style={{ marginTop: 0 }}>Items</h2>
         {order.items.map((it) => (
           <div key={it.product_id} className="impact-row">
-            <span>{it.name} × {it.quantity}</span>
+            <Link to={`/products/${it.product_id}`}>{it.name} × {it.quantity}</Link>
             <span className="mono">{money(it.line_total)}</span>
           </div>
         ))}

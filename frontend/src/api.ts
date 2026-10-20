@@ -1,8 +1,8 @@
 // Typed API client (Spec §17, §26). One thin fetch wrapper; attaches the JWT and extracts
 // FastAPI error details. No axios — native fetch keeps the bundle small (Spec §18).
 import type {
-  AdminOrderRow, AdminProductRow, Cart, Customer, Dashboard, Estimate, Order, OrderSummary,
-  ProductDetail, ProductPage, RestockRow, SalesReport, SustainabilityReport, TokenResponse,
+  AdminOrderRow, AdminProductRow, Cart, Customer, Dashboard, DeliveryDestination, Estimate, Order, OrderSummary,
+  ProductDetail, ProductPage, ProductRatingSummary, RestockRow, SalesReport, SustainabilityReport, TokenResponse,
   MessageResponse, PaymentInit,
 } from "./types";
 
@@ -70,6 +70,8 @@ export const api = {
     return request<ProductPage>(`/api/products?${qs.toString()}`);
   },
   product: (id: number) => request<ProductDetail>(`/api/products/${id}`),
+  rateProduct: (id: number, rating: number) =>
+    request<ProductRatingSummary>(`/api/products/${id}/rating`, { method: "POST", body: body({ rating }) }),
   categories: () => request<string[]>("/api/products/meta/categories"),
 
   // Cart
@@ -81,12 +83,12 @@ export const api = {
   removeCartItem: (id: number) => request<Cart>(`/api/cart/items/${id}`, { method: "DELETE" }),
 
   // Carbon estimate (single call powers the checkout impact panel)
-  estimate: (delivery_distance: number) =>
-    request<Estimate>("/api/carbon/estimate", { method: "POST", body: body({ delivery_distance }) }),
+  estimate: (destination: DeliveryDestination) =>
+    request<Estimate>("/api/carbon/estimate", { method: "POST", body: body(destination) }),
 
   // Orders
-  checkout: (delivery_method: string, delivery_distance: number) =>
-    request<Order>("/api/orders", { method: "POST", body: body({ delivery_method, delivery_distance }) }),
+  checkout: (delivery_method: string, destination: DeliveryDestination) =>
+    request<Order>("/api/orders", { method: "POST", body: body({ delivery_method, ...destination }) }),
   initPayment: (order_id: number, callback_url?: string) =>
     request<PaymentInit>("/api/payments/init", { method: "POST", body: body({ order_id, callback_url }) }),
   verifyPayment: (reference: string) =>

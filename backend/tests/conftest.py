@@ -9,7 +9,7 @@ os.environ["APP_ENV"] = "development"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["PAYSTACK_SECRET_KEY"] = ""
 os.environ["PAYSTACK_PUBLIC_KEY"] = ""
-os.environ["RESEND_API_KEY"] = ""
+os.environ["BREVO_API_KEY"] = ""
 os.environ["SMTP_HOST"] = ""
 os.environ["SMTP_USER"] = ""
 os.environ["SMTP_PASSWORD"] = ""
@@ -31,7 +31,7 @@ def test_environment(monkeypatch):
     test_settings = Settings(
         app_env="development",
         jwt_secret="test-jwt-secret-key-32-chars-long-minimum!",
-        resend_api_key="",
+        brevo_api_key="",
         paystack_secret_key="",
         paystack_public_key="",
         smtp_host="",

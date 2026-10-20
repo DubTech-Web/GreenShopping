@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import type { Cart as CartT } from "../types";
-import { ErrorNote, money, Spinner } from "../components";
+import { ErrorNote, money, Spinner, TrashIcon } from "../components";
 import { useApp } from "../store";
 
 export default function Cart() {
@@ -56,8 +56,10 @@ export default function Cart() {
                         onChange={(e) => apply(() => api.updateCartItem(it.id, Math.max(1, Number(e.target.value))))} />
                     </td>
                     <td className="mono">{money(it.line_total)}</td>
-                    <td><button className="btn btn-ghost btn-sm"
-                      onClick={() => apply(() => api.removeCartItem(it.id))}>Remove</button></td>
+                    <td><button className="btn btn-ghost btn-sm icon-button" aria-label={`Remove ${it.name} from cart`}
+                      title="Remove item" onClick={() => apply(() => api.removeCartItem(it.id))}>
+                      <TrashIcon />
+                    </button></td>
                   </tr>
                 ))}
               </tbody>

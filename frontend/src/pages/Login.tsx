@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../store";
 import { api, ApiError } from "../api";
-import { Leaf } from "../components";
+import { EyeIcon, Leaf } from "../components";
 
 export default function Login() {
   const { login } = useApp();
@@ -12,6 +12,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [resetMode, setResetMode] = useState(false);
   const [resetCode, setResetCode] = useState("");
   const [resetPassword, setResetPassword] = useState("");
@@ -66,11 +67,14 @@ export default function Login() {
         </div>
         <div className="field">
           <label className="label" htmlFor="password">Password</label>
-          <input id="password" className="input" type={showPassword ? "text" : "password"} required autoComplete="current-password"
-            value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPassword((shown) => !shown)}>
-            {showPassword ? "Hide password" : "Show password"}
-          </button>
+          <div className="password-input-wrap">
+            <input id="password" className="input password-input" type={showPassword ? "text" : "password"} required autoComplete="current-password"
+              value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword} onClick={() => setShowPassword((shown) => !shown)}>
+              <EyeIcon hidden={showPassword} />
+            </button>
+          </div>
         </div>
         <button className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Logging in…" : "Log in"}
@@ -82,7 +86,14 @@ export default function Login() {
           <strong>Reset password</strong>
           <button type="button" className="btn btn-accent btn-sm" onClick={forgot} disabled={busy}>Send reset code</button>
           <input className="input" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="6-digit code" required value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ""))} />
-          <input className="input" type="password" minLength={8} placeholder="New password" required value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} />
+          <div className="password-input-wrap">
+            <input className="input password-input" type={showResetPassword ? "text" : "password"} minLength={8}
+              placeholder="New password" required value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} />
+            <button type="button" className="password-toggle" aria-label={showResetPassword ? "Hide password" : "Show password"}
+              aria-pressed={showResetPassword} onClick={() => setShowResetPassword((shown) => !shown)}>
+              <EyeIcon hidden={showResetPassword} />
+            </button>
+          </div>
           <button type="button" className="btn btn-primary" disabled={busy} onClick={reset}>Update password</button>
         </div>}
         <p className="muted center-text">No account? <Link to="/register">Create one</Link></p>

@@ -9,6 +9,14 @@ docs/green-software.md. They are chosen so a ~100 km, ~1 kg parcel lands near th
 0.70 kg CO2e example for Standard delivery.
 """
 from dataclasses import dataclass
+from math import asin, cos, radians, sin, sqrt
+
+
+# Approximate business dispatch point in central Abuja, Nigeria.
+ABUJA_LATITUDE = 9.05785
+ABUJA_LONGITUDE = 7.49508
+EARTH_RADIUS_KM = 6371.0
+ROAD_DISTANCE_FACTOR = 1.3
 
 
 @dataclass(frozen=True)
@@ -28,6 +36,34 @@ DELIVERY_OPTIONS: tuple[DeliveryOption, ...] = (
 )
 
 _OPTIONS_BY_KEY = {opt.key: opt for opt in DELIVERY_OPTIONS}
+
+
+def estimate_route_distance_km(latitude: float, longitude: float) -> float:
+    """Estimate road distance from Abuja using a route detour allowance.
+
+    This is a privacy-preserving approximation, not turn-by-turn routing: coordinates stay
+    within the application and are not sent to a third-party maps provider.
+    """
+    lat1, lat2 = radians(ABUJA_LATITUDE), radians(latitude)
+    delta_lat = lat2 - lat1
+    delta_lon = radians(longitude - ABUJA_LONGITUDE)
+    haversine = (
+        sin(delta_lat / 2) ** 2
+        + cos(lat1) * cos(lat2) * sin(delta_lon / 2) ** 2
+    )
+    straight_line_km = 2 * EARTH_RADIUS_KM * asin(sqrt(min(1.0, haversine)))
+    return round(straight_line_km * ROAD_DISTANCE_FACTOR, 1)
+
+
+def delivery_distance_for_destination(
+    *,
+    delivery_distance: float | None,
+    latitude: float | None,
+    longitude: float | None,
+) -> float | None:
+    if latitude is not None and longitude is not None:
+        return estimate_route_distance_km(latitude, longitude)
+    return delivery_distance
 
 
 def get_option(key: str) -> DeliveryOption | None:

@@ -37,12 +37,12 @@ session to end (matrix Note A).
 ## Carbon estimator (R7) + Green delivery (R6)
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| POST | `/api/carbon/estimate` | Customer | For the current cart + a distance: product carbon, every delivery option's carbon + total, and the recommended greener option. One call powers the checkout impact panel. |
+| POST | `/api/carbon/estimate` | Customer | For the current cart + either a delivery distance or `latitude`/`longitude`: product carbon, each delivery option's carbon + total, estimated route distance, and the greener recommendation. Coordinates estimate a route from Abuja without sending them to a maps provider. |
 
 ## Orders (R4)
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| POST | `/api/orders` | Customer | Simulated checkout: validates stock, computes+stores carbon, creates order, reduces inventory (one transaction). |
+| POST | `/api/orders` | Customer | Checkout accepts `delivery_method` and either `latitude`/`longitude` or a legacy `delivery_distance`; location coordinates are converted to an estimated route distance from Abuja before carbon is computed and saved. |
 | GET | `/api/orders` | Customer | Order history (summaries). |
 | GET | `/api/orders/{id}` | Customer | Order detail with items. |
 

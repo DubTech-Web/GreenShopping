@@ -6,8 +6,8 @@ Security properties (Spec §2):
 - Codes expire and are single-use (consumed on success).
 - A per-purpose attempt cap and a resend cooldown throttle brute force / abuse.
 
-Delivery (``send_email``): SMTP first (e.g. free Gmail App Password, which delivers to any
-recipient with no custom domain), then Resend as a fallback. When neither is configured
+Delivery (``send_email``): the configured primary provider (Brevo in production, SMTP locally),
+then the other provider as a fallback. When neither is configured
 (local dev / tests) nothing is emailed; instead the caller may surface a ``dev_code`` in the
 response, but ONLY in non-production with no email provider (see routers/auth). Delivery never
 raises to the caller and codes are never logged in production (Spec §2, §6).
@@ -30,7 +30,7 @@ from ..models import Order, VerificationCode
 
 logger = logging.getLogger("greenshopping.email")
 
-_RESEND_ENDPOINT = "https://api.resend.com/emails"
+_BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 _TIMEOUT = httpx.Timeout(15.0)
 
 EMAIL_VERIFY = "email_verify"
@@ -140,76 +140,93 @@ def _format_money(amount: float) -> str:
 
 
 def send_email(to_email: str, subject: str, html_content: str) -> bool:
-    """Send an HTML email via SMTP (primary) or Resend, with clear server logging.
+    """Send an HTML email via the preferred provider and then its configured fallback.
 
     Returns True if sent successfully, False otherwise (never raises exceptions to caller):
     a transient mail outage must never 500 a registration or reveal which addresses exist.
     """
     settings = get_settings()
-    # 1. Try SMTP if configured (e.g. Gmail App Password, Mailgun, SendGrid)
-    if settings.smtp_enabled:
-        try:
-            msg = EmailMessage()
-            msg["Subject"] = subject
-            msg["From"] = settings.smtp_from_email or f"GreenShopping <{settings.smtp_user}>"
-            msg["To"] = to_email
-            msg.set_content("Please view this email in an HTML-compatible email client.")
-            msg.add_alternative(html_content, subtype="html")
-
-            if settings.smtp_use_ssl or settings.smtp_port == 465:
-                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-                    server.login(settings.smtp_user, settings.smtp_password)
-                    server.send_message(msg)
-            else:
-                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-                    if settings.smtp_use_tls:
-                        server.starttls()
-                    server.login(settings.smtp_user, settings.smtp_password)
-                    server.send_message(msg)
-            logger.info("Successfully sent email via SMTP to %s (Subject: '%s')", to_email, subject)
-            return True
-        except Exception as exc:
-            logger.warning("SMTP delivery to %s failed: %s", to_email, exc)
-
-    # 2. Try Resend if configured
-    if settings.resend_enabled:
-        try:
-            with httpx.Client(timeout=_TIMEOUT) as http:
-                resp = http.post(
-                    _RESEND_ENDPOINT,
-                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-                    json={
-                        "from": settings.resend_from_email,
-                        "to": [to_email],
-                        "subject": subject,
-                        "html": html_content,
-                    },
-                )
-                if resp.is_success:
-                    logger.info("Successfully sent email via Resend to %s", to_email)
-                    return True
-                else:
-                    logger.warning(
-                        "Resend API error (%s): %s. (Note: Resend test mode only allows sending to account owner unless domain is verified)",
-                        resp.status_code,
-                        resp.text,
+    providers = (
+        ("brevo", "smtp")
+        if settings.preferred_email_provider == "brevo"
+        else ("smtp", "brevo")
+    )
+    for provider in providers:
+        if provider == "brevo" and settings.brevo_enabled:
+            try:
+                with httpx.Client(timeout=_TIMEOUT) as http:
+                    resp = http.post(
+                        _BREVO_ENDPOINT,
+                        headers={
+                            "accept": "application/json",
+                            "api-key": settings.brevo_api_key,
+                            "content-type": "application/json",
+                        },
+                        json={
+                            "sender": {
+                                "name": settings.brevo_from_name,
+                                "email": settings.brevo_from_email,
+                            },
+                            "to": [{"email": to_email}],
+                            "subject": subject,
+                            "htmlContent": html_content,
+                        },
                     )
-        except Exception as exc:
-            logger.warning("Resend delivery network error for %s: %s", to_email, exc)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                logger.warning("Brevo connection failed (%s); trying fallback", type(exc).__name__)
+                continue
+            except httpx.HTTPError as exc:
+                # A timeout or transport error after sending may mean Brevo accepted the message.
+                logger.warning(
+                    "Brevo request outcome is uncertain (%s); skipping fallback",
+                    type(exc).__name__,
+                )
+                break
 
-    # 3. Development fallback
-    if not settings.is_production:
-        logger.info("[DEV EMAIL] To: %s | Subject: '%s'", to_email, subject)
+            if resp.is_success:
+                logger.info("Email sent via Brevo")
+                return True
+            if resp.status_code >= 500 or resp.status_code == 408:
+                logger.warning(
+                    "Brevo returned HTTP %s; delivery may be uncertain, skipping fallback",
+                    resp.status_code,
+                )
+                break
+            logger.warning("Brevo rejected the request with HTTP %s; trying fallback", resp.status_code)
+        elif provider == "smtp" and settings.smtp_enabled:
+            submission_started = False
+            try:
+                msg = EmailMessage()
+                msg["Subject"] = subject
+                msg["From"] = settings.smtp_from_email or f"GreenShopping <{settings.smtp_user}>"
+                msg["To"] = to_email
+                msg.set_content("Please view this email in an HTML-compatible email client.")
+                msg.add_alternative(html_content, subtype="html")
+
+                if settings.smtp_use_ssl or settings.smtp_port == 465:
+                    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                        server.login(settings.smtp_user, settings.smtp_password)
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                        if settings.smtp_use_tls:
+                            server.starttls()
+                        server.login(settings.smtp_user, settings.smtp_password)
+                        submission_started = True
+                        server.send_message(msg)
+                logger.info("Email sent via SMTP")
+                return True
+            except (smtplib.SMTPException, OSError) as exc:
+                logger.warning("SMTP delivery failed (%s)", type(exc).__name__)
+                if submission_started:
+                    break
 
     return False
 
 
-def send_code_email(to_email: str, code: str, purpose: str) -> None:
-    """Email the code via configured provider (SMTP primary, Resend fallback)."""
+def send_code_email(to_email: str, code: str, purpose: str) -> bool:
+    """Email the code via the configured provider and return whether delivery succeeded."""
     settings = get_settings()
-    # Log the verification code in non-production so devs/testers are never locked out.
-    if not settings.is_production:
-        logger.info("[AUTH CODE] Code for %s (%s): %s", to_email, purpose, code)
 
     ttl = settings.verification_code_ttl_minutes
     action = "verify your email" if purpose == EMAIL_VERIFY else "reset your password"
@@ -239,7 +256,7 @@ def send_code_email(to_email: str, code: str, purpose: str) -> None:
     </body>
     </html>
     """
-    send_email(to_email, _SUBJECTS.get(purpose, "Your GreenShopping code"), html)
+    return send_email(to_email, _SUBJECTS.get(purpose, "Your GreenShopping code"), html)
 
 
 def send_order_confirmation_email(order: Order, customer_email: str) -> None:
@@ -321,4 +338,3 @@ def send_order_confirmation_email(order: Order, customer_email: str) -> None:
     </html>
     """
     send_email(customer_email, subject, html)
-

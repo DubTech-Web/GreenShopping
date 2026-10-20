@@ -23,8 +23,9 @@ export default function Landing() {
           </div>
         </div>
         <div className="landing-feature">
-          {featured[0] && <ProductImage imageUrl={featured[0].image_url} name={featured[0].name} critical />}
-          <div className="landing-stamp"><strong>01</strong><span>Choose<br />with context</span></div>
+          {/* {featured[0] && <ProductImage imageUrl={featured[0].image_url} name={featured[0].name} critical />} */}
+          <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTNoiGTRqHUC-RpYShH-aSvBNbyNSXYIyx5po5bifV43w&s=10" alt="Shopping cart" />
+          <div className="landing-stamp"><strong>CO<sub>2</sub></strong><span>Choose<br />with context</span></div>
         </div>
       </section>
 
@@ -38,8 +39,8 @@ export default function Landing() {
       </section>
 
       <section className="landing-featured">
-        <div className="spread"><div><span className="eyebrow">A considered edit</span><h2>Small upgrades, real utility.</h2></div><Link to="/products" className="landing-link">View all products →</Link></div>
-        <div className="grid-products">{featured.slice(1).map((product) => <ProductCard key={product.id} p={product} />)}</div>
+        <div className="spread"><div><span className="eyebrow"></span><h2>Small upgrades, real utility.</h2></div><Link to="/products" className="landing-link">View all products →</Link></div>
+        <div className="grid-products">{featured.map((product) => <ProductCard key={product.id} p={product} />)}</div>
       </section>
     </div>
   );

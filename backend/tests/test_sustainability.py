@@ -9,6 +9,7 @@ from app.services import carbon
 from app.services.delivery import (
     DELIVERY_OPTIONS,
     delivery_carbon,
+    estimate_route_distance_km,
     get_option,
     recommend_greenest,
 )
@@ -24,6 +25,12 @@ def test_delivery_carbon_formula():
     eco = get_option("eco")
     # distance * weight * factor = 100 * 1 * 0.004
     assert delivery_carbon(100, 1.0, eco) == 0.4
+
+
+def test_route_distance_uses_abujas_location_and_road_allowance():
+    assert estimate_route_distance_km(9.05785, 7.49508) == 0
+    lagos_route = estimate_route_distance_km(6.5244, 3.3792)
+    assert 500 < lagos_route < 700
 
 
 def test_order_total_is_products_plus_delivery():
@@ -77,6 +84,26 @@ def test_estimate_returns_all_options_and_recommendation(client):
     # total = product + that option's delivery
     eco = next(o for o in body["options"] if o["key"] == "eco")
     assert eco["total_carbon"] == round(body["product_carbon"] + eco["delivery_carbon"], 3)
+
+
+def test_estimate_uses_customer_coordinates_for_route_distance(client):
+    token = register(client)
+    pid = _add_product(client, carbon_factor=2.0, weight=0.5)
+    client.post("/api/cart/items", json={"product_id": pid, "quantity": 2},
+                headers=auth_header(token))
+
+    resp = client.post(
+        "/api/carbon/estimate",
+        json={"latitude": 6.5244, "longitude": 3.3792},
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["delivery_distance"] == estimate_route_distance_km(6.5244, 3.3792)
+    eco = next(o for o in body["options"] if o["key"] == "eco")
+    assert eco["delivery_carbon"] == delivery_carbon(
+        body["delivery_distance"], body["package_weight"], get_option("eco")
+    )
 
 
 def test_estimate_empty_cart_rejected(client):

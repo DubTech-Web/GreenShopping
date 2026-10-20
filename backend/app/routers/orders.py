@@ -22,7 +22,7 @@ from ..models import Customer, Order, OrderItem
 from ..schemas import CheckoutRequest, OrderItemResponse, OrderResponse, OrderSummary
 from ..services import carbon, inventory, order_state
 from ..services.cart_query import load_cart_items
-from ..services.delivery import get_option
+from ..services.delivery import delivery_distance_for_destination, get_option
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -54,6 +54,17 @@ def checkout(
     if not items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Cart is empty")
 
+    distance_km = delivery_distance_for_destination(
+        delivery_distance=payload.delivery_distance,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+    )
+    if distance_km is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A delivery destination is required",
+        )
+
     # Re-validate stock at checkout so we don't create an order we can't fulfil. This does NOT
     # deduct — inventory is only committed at payment verification (Spec Phase-2 §13).
     for item in items:
@@ -65,7 +76,7 @@ def checkout(
     estimate = carbon.estimate_order_carbon(
         product_items=[(item.product.carbon_factor, item.quantity) for item in items],
         weight_items=[(item.product.weight, item.quantity) for item in items],
-        distance_km=payload.delivery_distance,
+        distance_km=distance_km,
         option=option,
     )
     total_amount = round(sum(float(i.product.price) * i.quantity for i in items), 2)
@@ -74,7 +85,7 @@ def checkout(
         customer_id=customer.id,
         total_amount=total_amount,
         delivery_method=option.key,
-        delivery_distance=payload.delivery_distance,
+        delivery_distance=distance_km,
         carbon_impact=estimate["total_carbon"],
         delivery_carbon=estimate["delivery_carbon"],
         status=order_state.PENDING_PAYMENT,

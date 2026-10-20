@@ -74,7 +74,12 @@ def _score(seed: Product, cand: Product) -> float:
     )
 
 
-def _reason(seed: Product, cand: Product) -> str:
+def _score_with_ratings(seed: Product, cand: Product, rating_average: float) -> float:
+    """Blend customer ratings into similarity ranking; unrated products get a neutral score."""
+    return round(0.85 * _score(seed, cand) + 0.15 * (rating_average / 5.0), 4)
+
+
+def _reason(seed: Product, cand: Product, rating_average: float | None = None) -> str:
     bits: list[str] = []
     if cand.category == seed.category:
         bits.append(f"same category ({cand.category})")
@@ -82,6 +87,8 @@ def _reason(seed: Product, cand: Product) -> str:
         bits.append(f"higher eco score ({cand.eco_score} vs {seed.eco_score})")
     if cand.carbon_factor < seed.carbon_factor:
         bits.append("lower estimated carbon impact")
+    if rating_average is not None and rating_average >= 4:
+        bits.append(f"high customer rating ({rating_average:.1f}/5)")
     if not bits:
         bits.append("related product")
     return "Recommended because it is " + ", ".join(bits) + "."
@@ -93,10 +100,15 @@ def recommend_similar(
     *,
     limit: int = 4,
     exclude_ids: set[int] = frozenset(),
+    rating_scores: dict[int, float] | None = None,
 ) -> list[ScoredProduct]:
     """Top-`limit` similar products, highest score first, each with an explanation."""
     scored = [
-        ScoredProduct(product=c, score=_score(seed, c), reason=_reason(seed, c))
+        ScoredProduct(
+            product=c,
+            score=_score_with_ratings(seed, c, (rating_scores or {}).get(c.id, 2.5)),
+            reason=_reason(seed, c, (rating_scores or {}).get(c.id)),
+        )
         for c in candidates
         if c.id != seed.id and c.id not in exclude_ids
     ]

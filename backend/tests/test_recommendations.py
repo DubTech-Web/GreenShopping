@@ -55,6 +55,20 @@ def test_exclude_ids_removes_owned_products():
     assert recommender.recommend_similar(seed, [cand], exclude_ids={2}) == []
 
 
+def test_product_ratings_influence_recommendation_ranking():
+    seed = _p(name="Seed", price=10)
+    seed.id = 1
+    low_rated = _p(name="Same product", price=10)
+    low_rated.id = 2
+    high_rated = _p(name="Same product", price=10)
+    high_rated.id = 3
+
+    ranked = recommender.recommend_similar(
+        seed, [low_rated, high_rated], rating_scores={2: 1.0, 3: 5.0}
+    )
+    assert [item.product.id for item in ranked] == [3, 2]
+
+
 # ---- Endpoint-level: bundled into product detail (Spec §17) ----
 def _seed_pair(client):
     db = next(client.app.dependency_overrides[get_db]())

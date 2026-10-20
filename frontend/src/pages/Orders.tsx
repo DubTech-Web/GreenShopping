@@ -32,7 +32,7 @@ export default function Orders() {
       ) : (
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Order</th><th>Date</th><th>Delivery</th><th>Carbon</th><th>Total</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Order</th><th>Date</th><th>Delivery</th><th>Carbon</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
@@ -42,8 +42,11 @@ export default function Orders() {
                   <td className="mono">{o.carbon_impact.toFixed(2)} kg</td>
                   <td className="mono">{money(o.total_amount)}</td>
                   <td><span className="badge badge-neutral">{o.status}</span></td>
-                  <td>{["Pending Payment", "Paid", "Processing"].includes(o.status) &&
-                    <button className="btn btn-ghost btn-sm" onClick={() => setCancelId(o.id)}>Cancel</button>}</td>
+                  <td><div className="row order-actions">
+                    <Link to={`/orders/${o.id}`} className="btn btn-ghost btn-sm">View details</Link>
+                    {["Pending Payment", "Paid", "Processing"].includes(o.status) &&
+                      <button className="btn btn-ghost btn-sm" onClick={() => setCancelId(o.id)}>Cancel</button>}
+                  </div></td>
                 </tr>
               ))}
             </tbody>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useApp } from "../store";
 import { api, ApiError } from "../api";
-import { Leaf } from "../components";
+import { EyeIcon, Leaf } from "../components";
 
 export default function Register() {
   const { register, login } = useApp();
@@ -80,17 +80,26 @@ export default function Register() {
         </div>
         <div className="field">
           <label className="label" htmlFor="password">Password</label>
-          <input id="password" className="input" type={showPassword ? "text" : "password"} required minLength={8}
-            autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPassword((shown) => !shown)}>
-            {showPassword ? "Hide password" : "Show password"}
-          </button>
+          <div className="password-input-wrap">
+            <input id="password" className="input password-input" type={showPassword ? "text" : "password"} required minLength={8}
+              autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword} onClick={() => setShowPassword((shown) => !shown)}>
+              <EyeIcon hidden={showPassword} />
+            </button>
+          </div>
           <span className="muted" style={{ fontSize: "0.8rem" }}>At least 8 characters.</span>
         </div>
         <div className="field">
           <label className="label" htmlFor="confirm-password">Confirm password</label>
-          <input id="confirm-password" className="input" type={showPassword ? "text" : "password"} required minLength={8}
-            autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <div className="password-input-wrap">
+            <input id="confirm-password" className="input password-input" type={showPassword ? "text" : "password"} required minLength={8}
+              autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword} onClick={() => setShowPassword((shown) => !shown)}>
+              <EyeIcon hidden={showPassword} />
+            </button>
+          </div>
         </div>
         <button className="btn btn-primary btn-block" disabled={busy}>
           {busy ? "Creating…" : "Create account"}

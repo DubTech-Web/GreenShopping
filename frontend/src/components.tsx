@@ -12,6 +12,62 @@ export function Leaf({ className }: { className?: string }) {
   );
 }
 
+export function EyeIcon({ hidden = false }: { hidden?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {hidden ? <>
+        <path d="M3 3l18 18" />
+        <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+        <path d="M9.9 5.2A11.2 11.2 0 0 1 12 5c5 0 8.5 4.2 9.5 7-.4 1.1-1.2 2.4-2.4 3.5" />
+        <path d="M6.2 6.2C4.2 7.5 3 9.3 2.5 12c.7 2.2 3.8 7 9.5 7 1 0 1.9-.2 2.7-.5" />
+      </> : <>
+        <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>}
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="m19 6-1 14H6L5 6" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  );
+}
+
+export function StarRating({ value, count, interactive = false, disabled = false, onRate }: {
+  value: number;
+  count?: number;
+  interactive?: boolean;
+  disabled?: boolean;
+  onRate?: (rating: number) => void;
+}) {
+  const stars = Array.from({ length: 5 }, (_, index) => index + 1);
+  return (
+    <div className={`star-rating${interactive ? " star-rating-interactive" : ""}`}
+      aria-label={interactive ? "Rate this product" : `Rated ${value.toFixed(1)} out of 5`}>
+      {stars.map((star) => interactive ? (
+        <button key={star} type="button" className={`star${star <= value ? " star-filled" : ""}`}
+          aria-label={`Rate ${star} out of 5 stars`} disabled={disabled}
+          onClick={() => onRate?.(star)}>★</button>
+      ) : (
+        <span key={star} className={`star${star <= Math.round(value) ? " star-filled" : ""}`} aria-hidden="true">
+          {star <= Math.round(value) ? "★" : "☆"}
+        </span>
+      ))}
+      {count !== undefined && <span className="star-meta">
+        {count > 0 ? `${value.toFixed(1)} (${count})` : "No ratings yet"}
+      </span>}
+    </div>
+  );
+}
+
 export function EcoScore({ score }: { score: number }) {
   return (
     <span className="eco-meter" title={`Eco score ${score}/100`}>
@@ -69,6 +125,7 @@ export function ProductCard({ p }: { p: ProductSummary }) {
           <EcoScore score={p.eco_score} />
           {p.is_eco_friendly && <EcoBadge />}
         </div>
+        <StarRating value={p.rating_average} count={p.rating_count} />
         <div className="spread" style={{ marginTop: "auto" }}>
           <span className="price">{money(p.price)}</span>
           <StockBadge quantity={p.stock_quantity} />

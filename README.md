@@ -70,11 +70,14 @@ Every recommendation ships with a plain-language explanation. Documented in
 
 ```
 order_carbon (kg CO₂e) = Σ(product.carbon_factor · qty)         ← products
-                       + distance · package_weight · emission_factor  ← delivery
+                       + Abuja-to-destination route estimate · package_weight · emission_factor  ← delivery
 ```
 
-All values are clearly labelled **estimates**; the total is stored on the order for
-reporting. Assumptions documented in `docs/green-software.md`.
+Customers can share their current location at checkout; the browser asks permission first.
+The server estimates road distance from the business's representative Abuja point using a
+road-distance allowance. Coordinates are not sent to a maps service or stored on the order.
+All values are clearly labelled **estimates**; the total is stored on the order for reporting.
+Assumptions documented in `docs/green-software.md`.
 
 ## 8. Green software engineering techniques
 

@@ -7,13 +7,20 @@ export interface Customer { id: number; name: string; email: string; is_admin: b
 export interface ProductSummary {
   id: number; name: string; image_url: string; category: string; price: number;
   stock_quantity: number; eco_score: number; is_eco_friendly: boolean;
+  rating_average: number; rating_count: number;
 }
-export interface Recommendation extends ProductSummary {
+export interface Recommendation {
+  id: number; name: string; image_url: string; category: string; price: number;
+  eco_score: number; is_eco_friendly: boolean; rating_average: number; rating_count: number;
   carbon_factor: number; score: number; reason: string;
 }
 export interface ProductDetail extends ProductSummary {
   description: string; weight: number; carbon_factor: number; low_stock_threshold: number;
+  user_rating: number | null;
   recommendations: Recommendation[]; eco_alternative: Recommendation | null;
+}
+export interface ProductRatingSummary {
+  rating_average: number; rating_count: number; user_rating: number | null;
 }
 export interface PageMeta { page: number; limit: number; total: number; pages: number; }
 export interface ProductPage { items: ProductSummary[]; meta: PageMeta; }
@@ -29,9 +36,11 @@ export interface DeliveryOptionEstimate {
   emission_factor: number; delivery_carbon: number; total_carbon: number;
 }
 export interface Estimate {
-  product_carbon: number; package_weight: number; options: DeliveryOptionEstimate[];
+  product_carbon: number; package_weight: number; delivery_distance: number;
+  options: DeliveryOptionEstimate[];
   recommended: string; reason: string; unit: string; is_estimate: boolean;
 }
+export interface DeliveryDestination { latitude: number; longitude: number; }
 
 export interface OrderItem {
   product_id: number; name: string; quantity: number; unit_price: number; line_total: number;

@@ -32,7 +32,7 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    # Email verification (Spec Phase-2 §1): an account stays unverified until a Resend code is
+    # Email verification (Spec Phase-2 §1): an account stays unverified until a delivery code is
     # confirmed; unverified accounts cannot access protected customer functionality.
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Justified deviation (matrix Note C): admin authorization for R9 / Spec §25.
@@ -58,6 +58,23 @@ class Product(Base):
     is_eco_friendly: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Justified deviation (matrix Note D): per-product low-stock threshold for R8.
     low_stock_threshold: Mapped[int] = mapped_column(Integer, default=5)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class ProductRating(Base):
+    __tablename__ = "product_ratings"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "product_id", name="uq_customer_product_rating"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.id", ondelete="CASCADE"), index=True
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    rating: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

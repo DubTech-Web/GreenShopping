@@ -1,6 +1,6 @@
 """Authentication endpoints (Spec §6, R1; Phase-2 §1–§6).
 
-Real email-based verification via Resend. The flow:
+Real email-based verification via Brevo or SMTP fallback. The flow:
 
     register -> account created *unverified* + 6-digit code emailed
     verify-email (email, code) -> account verified + JWT issued
@@ -42,14 +42,21 @@ from ..services.security import create_access_token, hash_password, verify_passw
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Generic acknowledgement reused so responses don't reveal whether an email exists (Spec §6).
-_GENERIC_SENT = "If that account exists and is eligible, a code has been sent."
+_GENERIC_SENT = "If that account exists, you can request instructions when email delivery is available."
+
+
+def _email_delivery_error() -> HTTPException:
+    return HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Email delivery is temporarily unavailable. Please try again later.",
+    )
 
 
 def _dev_code(code: str) -> str | None:
     """Surface the code to the client ONLY in non-production with no email provider (Spec §5).
 
     In real dev (Gmail SMTP configured) and in production, the code travels solely by email;
-    this returns None. It is populated only for local/CI runs with no SMTP/Resend, so the flow
+    this returns None. It is populated only for local/CI runs with no Brevo/SMTP, so the flow
     stays completable offline (see tests) without ever leaking codes once email is wired up.
     """
     settings = get_settings()
@@ -79,7 +86,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> Message
 
     code = email_service.issue_code(db, customer.id, email_service.EMAIL_VERIFY)
     db.commit()
-    email_service.send_code_email(customer.email, code, email_service.EMAIL_VERIFY)
+    delivered = email_service.send_code_email(customer.email, code, email_service.EMAIL_VERIFY)
+    if not delivered and _dev_code(code) is None:
+        raise _email_delivery_error()
     return MessageResponse(message="Verification code sent to your email.", dev_code=_dev_code(code))
 
 
@@ -114,7 +123,9 @@ def resend_code(payload: ResendCodeRequest, db: Session = Depends(get_db)) -> Me
 
     code = email_service.issue_code(db, customer.id, email_service.EMAIL_VERIFY)
     db.commit()
-    email_service.send_code_email(customer.email, code, email_service.EMAIL_VERIFY)
+    delivered = email_service.send_code_email(customer.email, code, email_service.EMAIL_VERIFY)
+    if not delivered and _dev_code(code) is None:
+        raise _email_delivery_error()
     return MessageResponse(
         message="A new code has been sent.",
         dev_code=_dev_code(code),

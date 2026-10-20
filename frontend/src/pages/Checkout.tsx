@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
-import type { Cart, Estimate } from "../types";
+import type { Cart, DeliveryDestination, Estimate } from "../types";
 import { ConfirmModal, ErrorNote, money, Spinner } from "../components";
 import { useApp } from "../store";
 
@@ -9,24 +9,25 @@ export default function Checkout() {
   const { refreshCart } = useApp();
   const navigate = useNavigate();
   const [cart, setCart] = useState<Cart | null>(null);
-  const [distance, setDistance] = useState(50);
+  const [destination, setDestination] = useState<DeliveryDestination | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [method, setMethod] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [locating, setLocating] = useState(false);
 
-  // Fetch the carbon estimate for a distance. Called on load and on explicit "update" —
-  // NOT on every keystroke, and never when only the delivery method changes (Spec §21).
-  const fetchEstimate = useCallback(async (dist: number) => {
+  const fetchEstimate = useCallback(async (location: DeliveryDestination) => {
     try {
-      const est = await api.estimate(dist);
+      const est = await api.estimate(location);
       setEstimate(est);
       setMethod((m) => m || est.recommended); // default to the greener recommendation
       setError("");
+      return true;
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not estimate impact");
+      return false;
     }
   }, []);
 
@@ -35,18 +36,48 @@ export default function Checkout() {
       try {
         const c = await api.cart();
         setCart(c);
-        if (c.item_count > 0) await fetchEstimate(50);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : "Could not load cart");
       } finally { setLoading(false); }
     })();
-  }, [fetchEstimate]);
+  }, []);
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Location is unavailable. Use a browser with location access over HTTPS and try again.");
+      return;
+    }
+    setLocating(true);
+    setError("");
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const current = { latitude: coords.latitude, longitude: coords.longitude };
+        if (await fetchEstimate(current)) setDestination(current);
+        setLocating(false);
+      },
+      (positionError) => {
+        const message = positionError.code === positionError.PERMISSION_DENIED
+          ? "Location permission was denied. Allow location access in your browser settings and try again."
+          : positionError.code === positionError.TIMEOUT
+            ? "Could not get your location in time. Please try again."
+            : "Could not determine your location. Check your device location settings and try again.";
+        setError(message);
+        setLocating(false);
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 },
+    );
+  };
 
   const placeOrder = async () => {
     setConfirming(false);
     setPlacing(true); setError("");
     try {
-      const order = await api.checkout(method, distance);
+      if (!destination) {
+        setError("Share your delivery location to calculate the route estimate before checkout.");
+        setPlacing(false);
+        return;
+      }
+      const order = await api.checkout(method, destination);
       const callbackUrl = `${window.location.origin}/orders/${order.id}`;
       const payment = await api.initPayment(order.id, callbackUrl);
       if (!payment.simulated && payment.authorization_url) {
@@ -77,15 +108,18 @@ export default function Checkout() {
         {/* Delivery selection */}
         <div className="stack">
           <div className="card card-pad stack">
-            <h2 style={{ margin: 0 }}>Delivery distance</h2>
-            <div className="row">
-              <input type="number" min={1} className="input" style={{ width: 120 }} value={distance}
-                onChange={(e) => setDistance(Math.max(1, Number(e.target.value)))} />
-              <span className="muted">km</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => fetchEstimate(distance)}>
-                Update estimate
-              </button>
-            </div>
+            <h2 style={{ margin: 0 }}>Delivery location</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Share your location to estimate a delivery route from Abuja, Nigeria. Your coordinates
+              are used only to calculate this estimate and are not saved with your order. Use this
+              if you are at the delivery destination.
+            </p>
+            <button className="btn btn-ghost" onClick={useCurrentLocation} disabled={locating}>
+              {locating ? "Getting location…" : destination ? "Refresh my location" : "Use my current location"}
+            </button>
+            {estimate && <p className="muted" style={{ margin: 0 }}>
+              Estimated route distance from Abuja: {estimate.delivery_distance.toFixed(1)} km
+            </p>}
           </div>
 
           <div className="card card-pad stack">
@@ -131,7 +165,7 @@ export default function Checkout() {
             <div className="impact-row impact-total"><span>Order total</span>
               <span className="mono">{selected ? money(cart.subtotal + selected.cost) : money(cart.subtotal)}</span></div>
             <button className="btn btn-primary btn-block" style={{ marginTop: 12 }}
-              disabled={!method || placing} onClick={() => setConfirming(true)}>
+              disabled={!method || !destination || !estimate || placing} onClick={() => setConfirming(true)}>
               {placing ? "Starting payment…" : "Continue to payment"}
             </button>
             <div className="reason center-text" style={{ marginTop: 6 }}>You will be redirected to secure Paystack checkout.</div>

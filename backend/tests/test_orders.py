@@ -1,6 +1,7 @@
 """Order tests (Spec §9 → Orders: checkout, inventory reduction, order creation)."""
 from app.database import get_db
 from app.models import Product
+from app.services.delivery import estimate_route_distance_km
 from tests.conftest import auth_header, register
 
 
@@ -73,3 +74,27 @@ def test_order_appears_in_history(client):
     orders = client.get("/api/orders", headers=auth_header(token)).json()
     assert len(orders) == 1
     assert orders[0]["delivery_method"] == "standard"
+
+
+def test_checkout_calculates_and_stores_route_distance_from_coordinates(client):
+    token = register(client)
+    pid = _add_product(client)
+    _cart_with(client, token, pid, 1)
+
+    resp = client.post(
+        "/api/orders",
+        json={"delivery_method": "eco", "latitude": 6.5244, "longitude": 3.3792},
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["delivery_distance"] == estimate_route_distance_km(6.5244, 3.3792)
+
+
+def test_delivery_destination_requires_both_coordinates(client):
+    token = register(client)
+    resp = client.post(
+        "/api/orders",
+        json={"delivery_method": "eco", "latitude": 6.5244},
+        headers=auth_header(token),
+    )
+    assert resp.status_code == 422

@@ -1,11 +1,12 @@
 """Application configuration, loaded from environment / .env (Spec §25, §30; Phase-2 §33).
 
 No secret is hardcoded. `JWT_SECRET` must be set in production; the development default is
-clearly marked and only used when the env var is absent. External integrations (Resend email,
+clearly marked and only used when the env var is absent. External integrations (Brevo email,
 Paystack payments, PostgreSQL) are all env-driven and degrade to a safe local/dev mode when
 their keys are absent, so the app runs and tests pass without any secrets (Spec Phase-2 §5, §33).
 """
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -35,14 +36,16 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
 
-    # ---- Email verification & notifications (SMTP / Resend) — Spec Phase-2 §1, §2, §5 ----
-    resend_api_key: str = ""     # empty -> dev mode or SMTP mode
-    resend_from_email: str = "GreenShopping <onboarding@resend.dev>"
+    # ---- Email verification & notifications (Brevo / SMTP fallback) — Spec Phase-2 §1, §2, §5 ----
+    email_provider: Literal["brevo", "smtp"] | None = None
+    brevo_api_key: str = ""
+    brevo_from_email: str = ""
+    brevo_from_name: str = "GreenShopping"
     verification_code_ttl_minutes: int = 10
     verification_resend_cooldown_seconds: int = 60
     verification_max_attempts: int = 5
 
-    # SMTP fallback / standard email provider (e.g. Gmail SMTP with App Password)
+    # SMTP fallback / local provider (e.g. Gmail SMTP with App Password)
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
@@ -77,12 +80,19 @@ class Settings(BaseSettings):
         return bool(self.smtp_host and self.smtp_user and self.smtp_password)
 
     @property
-    def resend_enabled(self) -> bool:
-        return bool(self.resend_api_key)
+    def preferred_email_provider(self) -> Literal["brevo", "smtp"]:
+        """Use the configured provider, otherwise prefer Brevo in production and SMTP locally."""
+        if self.email_provider is not None:
+            return self.email_provider
+        return "brevo" if self.is_production else "smtp"
+
+    @property
+    def brevo_enabled(self) -> bool:
+        return bool(self.brevo_api_key and self.brevo_from_email)
 
     @property
     def email_delivery_enabled(self) -> bool:
-        return self.smtp_enabled or self.resend_enabled
+        return self.smtp_enabled or self.brevo_enabled
 
     @property
     def paystack_enabled(self) -> bool:

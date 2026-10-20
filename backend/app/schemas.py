@@ -5,7 +5,7 @@ needs — smaller payloads, no accidental column leakage.
 """
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # ---- Auth ----
@@ -53,7 +53,7 @@ class TokenResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Generic acknowledgement for flows that must not leak state (e.g. code sent).
 
-    ``dev_code`` is populated ONLY in non-production when Resend is disabled, so a developer can
+    ``dev_code`` is populated ONLY in non-production when Brevo and SMTP are disabled, so a developer can
     complete the flow without a mail provider. It is never present in production (Spec §2, §5).
     """
 
@@ -85,6 +85,18 @@ class ProductSummary(BaseModel):
     stock_quantity: int
     eco_score: int
     is_eco_friendly: bool
+    rating_average: float = 0
+    rating_count: int = 0
+
+
+class ProductRatingRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+
+
+class ProductRatingSummary(BaseModel):
+    rating_average: float
+    rating_count: int
+    user_rating: int | None = None
 
 
 class ProductDetail(ProductSummary):
@@ -104,6 +116,8 @@ class RecommendationItem(BaseModel):
     price: float
     eco_score: int
     is_eco_friendly: bool
+    rating_average: float = 0
+    rating_count: int = 0
     carbon_factor: float
     score: float
     reason: str
@@ -112,6 +126,7 @@ class RecommendationItem(BaseModel):
 class ProductDetailWithRecs(ProductDetail):
     """Product page payload: the product + similar items + a greener alternative."""
 
+    user_rating: int | None = None
     recommendations: list[RecommendationItem] = []
     eco_alternative: RecommendationItem | None = None
 
@@ -164,15 +179,30 @@ class CarbonBreakdown(BaseModel):
     is_estimate: bool = True
 
 
-class CheckoutRequest(BaseModel):
+class DeliveryDestinationRequest(BaseModel):
+    # delivery_distance remains accepted for existing API clients; checkout uses coordinates.
+    delivery_distance: float | None = Field(
+        default=None, gt=0, le=20000, description="Distance in km"
+    )
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def validate_destination(self) -> "DeliveryDestinationRequest":
+        has_coordinates = self.latitude is not None and self.longitude is not None
+        has_partial_coordinates = (self.latitude is None) != (self.longitude is None)
+        if has_partial_coordinates or (has_coordinates == (self.delivery_distance is not None)):
+            raise ValueError("Provide either a delivery distance or both location coordinates")
+        return self
+
+
+class CheckoutRequest(DeliveryDestinationRequest):
     delivery_method: str = Field(description="Delivery option key: eco | standard | express")
-    delivery_distance: float = Field(gt=0, le=20000, description="Distance in km")
 
 
 # ---- Carbon estimate preview (single call powers the whole checkout screen) ----
-class EstimateRequest(BaseModel):
-    delivery_distance: float = Field(gt=0, le=20000, description="Distance in km")
-
+class EstimateRequest(DeliveryDestinationRequest):
+    pass
 
 class DeliveryOptionEstimate(BaseModel):
     key: str
@@ -187,6 +217,7 @@ class DeliveryOptionEstimate(BaseModel):
 class EstimateResponse(BaseModel):
     product_carbon: float
     package_weight: float
+    delivery_distance: float
     options: list[DeliveryOptionEstimate]
     recommended: str  # option key with lowest total carbon
     reason: str

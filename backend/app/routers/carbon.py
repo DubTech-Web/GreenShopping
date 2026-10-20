@@ -16,7 +16,11 @@ from ..models import Customer
 from ..schemas import DeliveryOptionEstimate, EstimateRequest, EstimateResponse
 from ..services import carbon
 from ..services.cart_query import load_cart_items
-from ..services.delivery import DELIVERY_OPTIONS, delivery_carbon
+from ..services.delivery import (
+    DELIVERY_OPTIONS,
+    delivery_carbon,
+    delivery_distance_for_destination,
+)
 
 router = APIRouter(prefix="/api/carbon", tags=["carbon"])
 
@@ -31,6 +35,17 @@ def estimate(
     if not items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart is empty")
 
+    distance_km = delivery_distance_for_destination(
+        delivery_distance=payload.delivery_distance,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+    )
+    if distance_km is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A delivery destination is required",
+        )
+
     product_carbon = carbon.product_carbon(
         [(i.product.carbon_factor, i.quantity) for i in items]
     )
@@ -43,7 +58,7 @@ def estimate(
             speed=opt.speed,
             cost=opt.cost,
             emission_factor=opt.emission_factor,
-            delivery_carbon=(dc := delivery_carbon(payload.delivery_distance, weight, opt)),
+            delivery_carbon=(dc := delivery_carbon(distance_km, weight, opt)),
             total_carbon=round(product_carbon + dc, 3),
         )
         for opt in DELIVERY_OPTIONS
@@ -60,6 +75,7 @@ def estimate(
     return EstimateResponse(
         product_carbon=product_carbon,
         package_weight=weight,
+        delivery_distance=distance_km,
         options=options,
         recommended=greenest.key,
         reason=reason,
